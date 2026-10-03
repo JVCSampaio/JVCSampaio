@@ -1,12 +1,40 @@
 # John Sampaio
 
-**Dados, BI e desenvolvimento de aplicações.**
+**Desenvolvimento de sistemas, Python, React e análise de dados.**
 
-Meu portfólio reúne projetos que conectam dados a uma entrega utilizável: dashboards,
-pipelines, modelos preditivos e APIs. Cada repositório apresenta o problema, as decisões
-técnicas e as instruções para reproduzir o trabalho.
+Meu portfólio reúne aplicações com regras de negócio, APIs REST, bancos de dados,
+testes e documentação, além de projetos de análise e BI. Cada repositório apresenta
+o problema, as decisões técnicas e as instruções para executar e verificar a entrega.
 
 ## Projetos em destaque
+
+### [ServiceDesk · Central de chamados](https://github.com/JVCSampaio/service-desk)
+
+Sistema de atendimento interno: cadastro, prioridades, atribuição de equipe, resolução
+e histórico. Controle de versão recusa alterações desatualizadas; os testes verificam
+regras, persistência e o fluxo completo pela interface.
+
+**Python · FastAPI · React · TypeScript · SQLite · Pytest · Playwright**  
+[Código e execução](https://github.com/JVCSampaio/service-desk)
+· [Requisitos e casos de teste](https://github.com/JVCSampaio/service-desk/blob/main/docs/ANALISE.md)
+
+<a href="https://github.com/JVCSampaio/service-desk">
+  <img src="https://raw.githubusercontent.com/JVCSampaio/service-desk/main/docs/overview.png" alt="ServiceDesk: fila, prioridades e histórico de atendimento" width="900">
+</a>
+
+### [StockFlow · Inventário e movimentações](https://github.com/JVCSampaio/stockflow)
+
+Controle de materiais de TI com saldo e histórico na mesma transação, bloqueio de
+saídas acima do saldo e reenvios sem duplicação. Inclui testes de concorrência,
+interface responsiva e CSVs para análise no Power BI.
+
+**Python · FastAPI · React · TypeScript · SQLite · Pytest · Docker**  
+[Código e execução](https://github.com/JVCSampaio/stockflow)
+· [Regras e decisões](https://github.com/JVCSampaio/stockflow/blob/main/docs/ANALISE.md)
+
+<a href="https://github.com/JVCSampaio/stockflow">
+  <img src="https://raw.githubusercontent.com/JVCSampaio/stockflow/main/docs/overview.png" alt="StockFlow: inventário, reposição e registro de movimentações" width="900">
+</a>
 
 ### [E-commerce Analytics · React + Power BI](https://github.com/JVCSampaio/ecommerce-analytics-react-powerbi)
 
@@ -49,7 +77,8 @@ Random Forest e XGBoost, acompanhamento de experimentos e API de inferência.
 - **Análise e BI:** Python, pandas, SQL, Power BI, DAX e Power Query.
 - **Modelagem:** scikit-learn, XGBoost e MLflow.
 - **Aplicações:** React, TypeScript, FastAPI e ASP.NET Core.
-- **Entrega:** Git, GitHub Actions, Docker e PostgreSQL.
+- **Bancos de dados:** SQL, SQLite e PostgreSQL.
+- **Testes e entrega:** Pytest, Playwright, Git, GitHub Actions e Docker.
 
 Os projetos de estudo identificam suas referências; os projetos com dados sintéticos
 declaram essa origem. Resultados, testes e limitações estão descritos nos respectivos repositórios.
