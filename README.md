@@ -8,6 +8,47 @@ o problema, as decisões técnicas e as instruções para executar e verificar a
 
 ## Projetos em destaque
 
+**Análise de dados e BI:** [SupplyWatch — compras e fornecedores](https://github.com/JVCSampaio/supplywatch-analytics)
+· [Commercial Pulse — vendas e margem](https://github.com/JVCSampaio/commercial-pulse-analytics)
+
+### [SupplyWatch · Compras e fornecedores em Óleo e Gás](https://github.com/JVCSampaio/supplywatch-analytics)
+
+Análise de 1.800 linhas de compra simuladas: entregas completas no prazo (OTIF),
+atrasos e saldo vencido por fornecedor. Pipeline integra CSV, Excel e JSON/API,
+isola registros inválidos e alimenta um modelo estrela com dashboard de autosserviço.
+Inclui recomendações de negócio, 28 testes automatizados e validação no GitHub Actions.
+
+**Python · SQL · SQLite · pandas · Streamlit · Plotly · Power BI / TMDL · DAX**
+
+[Código e execução](https://github.com/JVCSampaio/supplywatch-analytics)
+· [Análise e recomendações](https://github.com/JVCSampaio/supplywatch-analytics/blob/main/reports/sample/executive_summary.md)
+· [Pacote Power BI](https://github.com/JVCSampaio/supplywatch-analytics/tree/main/powerbi)
+
+<a href="https://github.com/JVCSampaio/supplywatch-analytics">
+  <img src="https://raw.githubusercontent.com/JVCSampaio/supplywatch-analytics/main/docs/dashboard.jpg" alt="SupplyWatch: valor contratado, OTIF, saldo vencido e análise por categoria" width="900">
+</a>
+
+### [Commercial Pulse · Receita e margem comercial B2B](https://github.com/JVCSampaio/commercial-pulse-analytics)
+
+Análise de 3.600 linhas de venda simuladas: receita, margem ponderada, descontos e
+devoluções por cliente e produto. Inclui dashboard com filtros e exportação, qualidade
+dos dados e regressão com teste temporal comparada a um baseline sazonal.
+São 29 testes automatizados e validação no GitHub Actions.
+
+**Python · SQL · pandas · scikit-learn · Streamlit · Plotly · Power BI / TMDL · DAX**
+
+[Código e execução](https://github.com/JVCSampaio/commercial-pulse-analytics)
+· [Análise e estudo estatístico](https://github.com/JVCSampaio/commercial-pulse-analytics/blob/main/reports/sample/executive_summary.md)
+· [Pacote Power BI](https://github.com/JVCSampaio/commercial-pulse-analytics/tree/main/powerbi)
+
+<a href="https://github.com/JVCSampaio/commercial-pulse-analytics">
+  <img src="https://raw.githubusercontent.com/JVCSampaio/commercial-pulse-analytics/main/docs/dashboard.jpg" alt="Commercial Pulse: receita líquida, margem bruta, devoluções e evolução mensal" width="900">
+</a>
+
+Nos dois projetos, os dashboards executáveis usam Streamlit. Os pacotes Power BI incluem
+TMDL, DAX e Power Query com validação estrutural; a montagem visual e a homologação no
+Power BI Desktop estão pendentes, sem arquivo PBIX entregue.
+
 ### [ServiceDesk · Central de chamados](https://github.com/JVCSampaio/service-desk)
 
 Sistema de atendimento interno: cadastro, prioridades, atribuição de equipe, resolução
@@ -74,7 +115,7 @@ Random Forest e XGBoost, acompanhamento de experimentos e API de inferência.
 
 ## Tecnologias presentes no portfólio
 
-- **Análise e BI:** Python, pandas, SQL, Power BI, DAX e Power Query.
+- **Análise e BI:** Python, pandas, SQL, Power BI, DAX, Power Query, Streamlit e Plotly.
 - **Modelagem:** scikit-learn, XGBoost e MLflow.
 - **Aplicações:** React, TypeScript, FastAPI e ASP.NET Core.
 - **Bancos de dados:** SQL, SQLite e PostgreSQL.
