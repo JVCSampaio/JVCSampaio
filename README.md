@@ -1,6 +1,6 @@
 # John Sampaio
 
-**Desenvolvimento de sistemas, Python, React e análise de dados.**
+**Desenvolvimento de sistemas, qualidade de software (QA), Python, React e análise de dados.**
 
 Meu portfólio reúne aplicações com regras de negócio, APIs REST, bancos de dados,
 testes e documentação, além de projetos de análise e BI. Cada repositório apresenta
@@ -8,8 +8,48 @@ o problema, as decisões técnicas e as instruções para executar e verificar a
 
 ## Projetos em destaque
 
+**Qualidade de software (QA):** [ServiceDesk QA — Cypress, BDD e API](https://github.com/JVCSampaio/service-desk-qa)
+· [ChatFlow — chatbot omnichannel com testes em camadas](https://github.com/JVCSampaio/chatflow)
+
 **Análise de dados e BI:** [SupplyWatch — compras e fornecedores](https://github.com/JVCSampaio/supplywatch-analytics)
 · [Commercial Pulse — vendas e margem](https://github.com/JVCSampaio/commercial-pulse-analytics)
+
+### [ServiceDesk QA · Cypress, BDD e contrato de API](https://github.com/JVCSampaio/service-desk-qa)
+
+Suíte de testes automatizados do ServiceDesk: 53 cenários em Gherkin, em português, executados
+pelo Cypress contra a aplicação real, com contrato da API validado por JSON Schema, análise de
+valor-limite e edição simultânea por dois atendentes. A sessão exploratória encontrou 6 defeitos
+reais, documentados com passos, causa provável e um cenário automatizado que reproduz cada um.
+O CI roda a cada commit e diariamente, e publica o relatório Cucumber.
+
+**Cypress · Cucumber / Gherkin · TypeScript · JSON Schema (Ajv) · Testing Library · GitHub Actions**
+
+[Código e execução](https://github.com/JVCSampaio/service-desk-qa)
+· [Defeitos encontrados](https://github.com/JVCSampaio/service-desk-qa/blob/main/docs/BUGS.md)
+· [Plano de testes](https://github.com/JVCSampaio/service-desk-qa/blob/main/docs/PLANO_DE_TESTES.md)
+· [Relatório da última execução](https://jvcsampaio.github.io/service-desk-qa/)
+
+<a href="https://github.com/JVCSampaio/service-desk-qa">
+  <img src="https://raw.githubusercontent.com/JVCSampaio/service-desk-qa/main/docs/relatorio-bdd.png" alt="ServiceDesk QA: cenários em português aprovados no relatório Cucumber" width="900">
+</a>
+
+### [ChatFlow · Chatbot omnichannel com testes em camadas](https://github.com/JVCSampaio/chatflow)
+
+Chatbot de atendimento no WhatsApp (formato da Cloud API), no Telegram e no site, com
+transferência para atendente humano, webhooks idempotentes com assinatura HMAC e dados
+pessoais mascarados (LGPD). Testado em cinco camadas: 166 testes de unidade e de API
+(99,7% de cobertura de linhas), 24 cenários BDD, coleção Postman executada pelo Newman e
+testes Selenium, incluindo cliente e atendente em dois navegadores ao mesmo tempo.
+
+**Node.js · TypeScript · Express · MongoDB · React · Vitest · Supertest · Cucumber · Postman / Newman · Selenium · Docker**
+
+[Código e execução](https://github.com/JVCSampaio/chatflow)
+· [Estratégia de testes](https://github.com/JVCSampaio/chatflow/blob/main/docs/ESTRATEGIA_DE_TESTES.md)
+· [Relatórios de testes](https://jvcsampaio.github.io/chatflow/)
+
+<a href="https://github.com/JVCSampaio/chatflow">
+  <img src="https://raw.githubusercontent.com/JVCSampaio/chatflow/main/docs/console.png" alt="ChatFlow: console do atendente com fila de WhatsApp, Telegram e site" width="900">
+</a>
 
 ### [SupplyWatch · Compras e fornecedores em Óleo e Gás](https://github.com/JVCSampaio/supplywatch-analytics)
 
@@ -58,6 +98,7 @@ regras, persistência e o fluxo completo pela interface.
 **Python · FastAPI · React · TypeScript · SQLite · Pytest · Playwright**  
 [Código e execução](https://github.com/JVCSampaio/service-desk)
 · [Requisitos e casos de teste](https://github.com/JVCSampaio/service-desk/blob/main/docs/ANALISE.md)
+· [Suíte de QA (Cypress + BDD)](https://github.com/JVCSampaio/service-desk-qa)
 
 <a href="https://github.com/JVCSampaio/service-desk">
   <img src="https://raw.githubusercontent.com/JVCSampaio/service-desk/main/docs/overview.png" alt="ServiceDesk: fila, prioridades e histórico de atendimento" width="900">
@@ -117,9 +158,11 @@ Random Forest e XGBoost, acompanhamento de experimentos e API de inferência.
 
 - **Análise e BI:** Python, pandas, SQL, Power BI, DAX, Power Query, Streamlit e Plotly.
 - **Modelagem:** scikit-learn, XGBoost e MLflow.
-- **Aplicações:** React, TypeScript, FastAPI e ASP.NET Core.
-- **Bancos de dados:** SQL, SQLite e PostgreSQL.
-- **Testes e entrega:** Pytest, Playwright, Git, GitHub Actions e Docker.
+- **Aplicações:** React, TypeScript, Node.js / Express, FastAPI e ASP.NET Core.
+- **Bancos de dados:** SQL, SQLite, PostgreSQL e MongoDB.
+- **Qualidade de software:** Cypress, Selenium, Cucumber / Gherkin (BDD), Postman / Newman,
+  Supertest, Vitest, Pytest e Playwright; testes de contrato, valor-limite, concorrência e exploratórios.
+- **Entrega:** Git, GitHub Actions e Docker.
 
 Os projetos de estudo identificam suas referências; os projetos com dados sintéticos
 declaram essa origem. Resultados, testes e limitações estão descritos nos respectivos repositórios.
