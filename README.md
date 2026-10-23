@@ -16,16 +16,18 @@ o problema, as decisões técnicas e as instruções para executar e verificar a
 
 ### [ServiceDesk QA · Cypress, BDD e contrato de API](https://github.com/JVCSampaio/service-desk-qa)
 
-Suíte de testes automatizados do ServiceDesk: 53 cenários em Gherkin, em português, executados
+Suíte de testes automatizados do ServiceDesk: 59 cenários em Gherkin, em português, executados
 pelo Cypress contra a aplicação real, com contrato da API validado por JSON Schema, análise de
 valor-limite e edição simultânea por dois atendentes. A sessão exploratória encontrou 6 defeitos
-reais, documentados com passos, causa provável e um cenário automatizado que reproduz cada um.
-O CI roda a cada commit e diariamente, e publica o relatório Cucumber.
+reais, levados pelo ciclo completo: cenário que reproduz, issue com evidência, correção no
+ServiceDesk e cenário promovido a teste de regressão. O CI roda a cada commit e diariamente,
+e publica o relatório Cucumber.
 
 **Cypress · Cucumber / Gherkin · TypeScript · JSON Schema (Ajv) · Testing Library · GitHub Actions**
 
 [Código e execução](https://github.com/JVCSampaio/service-desk-qa)
 · [Defeitos encontrados](https://github.com/JVCSampaio/service-desk-qa/blob/main/docs/BUGS.md)
+· [Correção no ServiceDesk (PR #7)](https://github.com/JVCSampaio/service-desk/pull/7)
 · [Plano de testes](https://github.com/JVCSampaio/service-desk-qa/blob/main/docs/PLANO_DE_TESTES.md)
 · [Relatório da última execução](https://jvcsampaio.github.io/service-desk-qa/)
 
