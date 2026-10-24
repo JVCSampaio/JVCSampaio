@@ -1,3 +1,4 @@
+import java.time.LocalDate
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -22,7 +23,7 @@ android {
         versionCode = buildNumber
         versionName = "1.1.$buildNumber"
         // Shown on the identification plate (Placa) as the date of manufacture.
-        buildConfigField("String", "BUILD_DATE", "\"${java.time.LocalDate.now()}\"")
+        buildConfigField("String", "BUILD_DATE", "\"${LocalDate.now()}\"")
     }
 
     signingConfigs {
