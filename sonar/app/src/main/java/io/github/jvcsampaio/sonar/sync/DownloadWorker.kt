@@ -175,7 +175,10 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val now = System.currentTimeMillis()
         if (now - settings.engineCheckedAt < ENGINE_CHECK_INTERVAL_MS) return
         runCatching { app.downloader.updateEngine() }
-            .onSuccess { app.settings.update { it.copy(engineCheckedAt = now) } }
+            .onSuccess { updated ->
+                Log.i(TAG, if (updated) "yt-dlp updated to ${app.downloader.engineVersion()}" else "yt-dlp is up to date")
+                app.settings.update { it.copy(engineCheckedAt = now) }
+            }
             .onFailure { Log.w(TAG, "yt-dlp update failed", it) }
     }
 

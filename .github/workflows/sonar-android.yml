@@ -86,7 +86,7 @@ jobs:
       - name: Shrink screenshots
         if: always()
         run: |
-          sudo apt-get install -y -qq imagemagick > /dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick > /dev/null
           mkdir -p sonar/docs/screenshots
           for f in smoke/*.png; do
             [ -e "$f" ] && convert "$f" -resize 540x -quality 82 "sonar/docs/screenshots/$(basename "${f%.png}").jpg"

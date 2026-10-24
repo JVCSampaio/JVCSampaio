@@ -81,7 +81,7 @@ class SonarViewModel(application: Application) : AndroidViewModel(application) {
             val title = app.youtube.videoTitle(videoId)
             val message = when (app.library.addShared(videoId, title)) {
                 ShareResult.AlreadyInLibrary -> "Essa música já está na biblioteca"
-                ShareResult.Queued -> "Na fila: ${title?.title ?: "música do YouTube"}"
+                ShareResult.Queued -> title?.let { "Na fila: ${it.title}" } ?: "Na fila. O título aparece quando o download terminar."
             }
             say(message)
         }

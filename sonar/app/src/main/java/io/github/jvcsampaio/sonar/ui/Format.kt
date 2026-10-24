@@ -35,3 +35,9 @@ fun formatAgo(time: Long, now: Long = System.currentTimeMillis()): String {
 }
 
 fun songCount(count: Int) = if (count == 1) "1 música" else "$count músicas"
+
+/** "Artist · 3:45", leaving out what is not known yet (shared links before download). */
+fun artistAndDuration(artist: String, durationMs: Long): String =
+    listOfNotNull(artist.takeIf { it.isNotBlank() }, durationMs.takeIf { it > 0 }?.let(::formatDuration))
+        .joinToString(" · ")
+        .ifEmpty { "Detalhes chegam com o download" }

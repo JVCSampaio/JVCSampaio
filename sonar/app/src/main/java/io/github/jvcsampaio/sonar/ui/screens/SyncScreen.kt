@@ -71,7 +71,7 @@ import io.github.jvcsampaio.sonar.ui.components.ScreenHeader
 import io.github.jvcsampaio.sonar.ui.components.TextInputDialog
 import io.github.jvcsampaio.sonar.ui.components.TrackRow
 import io.github.jvcsampaio.sonar.ui.formatAgo
-import io.github.jvcsampaio.sonar.ui.formatDuration
+import io.github.jvcsampaio.sonar.ui.artistAndDuration
 import io.github.jvcsampaio.sonar.ui.songCount
 import kotlinx.coroutines.launch
 
@@ -274,8 +274,8 @@ fun SyncScreen(vm: SonarViewModel, actions: AppActions) {
 @Composable
 private fun PendingRow(track: TrackEntity, vm: SonarViewModel) {
     val (supporting, color) = when (track.status) {
-        TrackStatus.DOWNLOADING -> "Baixando agora · ${track.artist}" to MaterialTheme.colorScheme.primary
-        TrackStatus.QUEUED -> "${track.artist} · ${formatDuration(track.durationMs)}" to MaterialTheme.colorScheme.onSurfaceVariant
+        TrackStatus.DOWNLOADING -> "Baixando agora" to MaterialTheme.colorScheme.primary
+        TrackStatus.QUEUED -> artistAndDuration(track.artist, track.durationMs) to MaterialTheme.colorScheme.onSurfaceVariant
         TrackStatus.FAILED -> (track.statusNote ?: "Falhou") to MaterialTheme.colorScheme.error
         else -> (track.statusNote ?: "Ignorada") to MaterialTheme.colorScheme.onSurfaceVariant
     }

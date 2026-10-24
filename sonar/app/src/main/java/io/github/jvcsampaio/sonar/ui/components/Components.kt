@@ -61,7 +61,7 @@ import coil3.request.allowHardware
 import coil3.toBitmap
 import io.github.jvcsampaio.sonar.data.db.TrackEntity
 import io.github.jvcsampaio.sonar.data.db.artwork
-import io.github.jvcsampaio.sonar.ui.formatDuration
+import io.github.jvcsampaio.sonar.ui.artistAndDuration
 import io.github.jvcsampaio.sonar.ui.theme.Ink
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -169,7 +169,7 @@ fun TrackRow(
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                supporting ?: "${track.artist} · ${formatDuration(track.durationMs)}",
+                supporting ?: artistAndDuration(track.artist, track.durationMs),
                 style = MaterialTheme.typography.bodySmall,
                 color = supportingColor,
                 maxLines = if (supporting != null) 2 else 1,

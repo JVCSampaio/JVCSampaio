@@ -7,7 +7,8 @@ set -uo pipefail
 APK="$1"
 OUT="$2"
 PKG="io.github.jvcsampaio.sonar"
-VIDEO="https://youtu.be/BaW_jenozKc"   # yt-dlp's own CC-BY test video (10 s)
+# Long-lived public videos used by many download tools as test fixtures, tried in order.
+VIDEOS="dQw4w9WgXcQ jNQXAC9IVRw"
 mkdir -p "$OUT"
 
 shot() {
@@ -57,19 +58,22 @@ tap "Ajustes" && shot 03-settings
 adb shell input keyevent KEYCODE_BACK
 tap "Biblioteca" && shot 04-library-empty
 
-echo "== sharing $VIDEO"
-adb shell am start -a android.intent.action.SEND -t text/plain \
-  --es android.intent.extra.TEXT "$VIDEO" -n "$PKG/.MainActivity"
-shot 05-sync-queued
-
-result="timeout"
-for _ in $(seq 1 60); do
-  log=$(adb logcat -d -s DownloadWorker:* 2>/dev/null)
-  if echo "$log" | grep -q "Downloaded BaW_jenozKc"; then result="downloaded"; break; fi
-  if echo "$log" | grep -q "Download failed for BaW_jenozKc"; then result="failed"; break; fi
-  sleep 5
+result="none"
+for id in $VIDEOS; do
+  echo "== sharing https://youtu.be/$id"
+  adb shell am start -a android.intent.action.SEND -t text/plain \
+    --es android.intent.extra.TEXT "https://youtu.be/$id" -n "$PKG/.MainActivity"
+  shot "05-queued-$id"
+  result="timeout"
+  for _ in $(seq 1 60); do
+    log=$(adb logcat -d -s DownloadWorker:* 2>/dev/null)
+    if echo "$log" | grep -q "Downloaded $id"; then result="downloaded"; break; fi
+    if echo "$log" | grep -q "Download failed for $id"; then result="failed"; break; fi
+    sleep 5
+  done
+  echo "== $id: $result"
+  [ "$result" = "downloaded" ] && break
 done
-echo "== download result: $result"
 adb logcat -d -s DownloadWorker:* | tail -20
 shot 06-sync-after
 
