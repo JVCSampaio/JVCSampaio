@@ -76,6 +76,9 @@ for id in $VIDEOS; do
 done
 adb logcat -d -s DownloadWorker:* | tail -20
 shot 06-sync-after
+# The console (faculties, log well) and the Probatvm seal sit below the account panel.
+adb shell input swipe 540 1900 540 700 300 && shot 06b-oficina-console
+adb shell input swipe 540 1900 540 900 300 && shot 06c-oficina-selo
 
 tap "INÍCIO" && shot 07-home
 if [ "$result" = "downloaded" ]; then
