@@ -102,27 +102,27 @@ fun Emblem(modifier: Modifier = Modifier, pulse: Boolean = false) {
         val u = size.minDimension / 108f
         val origin = Offset(size.width / 2 - 54f * u, size.height / 2 - 54f * u)
         fun p(x: Float, y: Float) = Offset(origin.x + x * u, origin.y + y * u)
-        fun polyline(vararg points: Offset) = Path().apply {
+        fun polyline(points: List<Offset>) = Path().apply {
             moveTo(points[0].x, points[0].y)
             points.drop(1).forEach { lineTo(it.x, it.y) }
         }
         val stroke = (3f * u).coerceAtLeast(1.2f)
         drawLine(Meridiano.Bronze, p(54f, 6f), p(54f, 102f), stroke)
         drawPath(
-            polyline(p(44f, 30f), p(26f, 54f), p(54f, 92f), p(82f, 54f), p(64f, 30f)),
+            polyline(listOf(p(44f, 30f), p(26f, 54f), p(54f, 92f), p(82f, 54f), p(64f, 30f))),
             Meridiano.Ivory,
             style = Stroke(stroke, join = StrokeJoin.Miter),
         )
         // The inner structure only reads at larger sizes.
         if (size.minDimension >= 40.dp.toPx()) {
             drawPath(
-                polyline(p(48f, 38f), p(36f, 54f), p(54f, 74f), p(72f, 54f), p(60f, 38f)),
+                polyline(listOf(p(48f, 38f), p(36f, 54f), p(54f, 74f), p(72f, 54f), p(60f, 38f))),
                 Meridiano.Ivory.copy(alpha = 0.55f),
                 style = Stroke(stroke * 0.66f, join = StrokeJoin.Miter),
             )
         }
         drawPath(
-            polyline(p(54f, 45f), p(63f, 54f), p(54f, 63f), p(45f, 54f)).apply { close() },
+            polyline(listOf(p(54f, 45f), p(63f, 54f), p(54f, 63f), p(45f, 54f))).apply { close() },
             Meridiano.Bronze.copy(alpha = coreAlpha),
         )
     }
