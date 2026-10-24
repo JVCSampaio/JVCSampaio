@@ -1,0 +1,50 @@
+name: Sonar Android
+
+on:
+  push:
+    paths:
+      - "sonar/**"
+      - ".github/workflows/sonar-android.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: sonar
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests and release APKs
+        run: ./gradlew --stacktrace :app:testReleaseUnitTest :app:assembleRelease
+
+      - name: Signing certificate (register this SHA-1 in Google Cloud)
+        run: keytool -list -v -keystore keystore/sonar.jks -storepass sonar-public | grep -E "SHA1|SHA256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sonar-apk-${{ github.run_number }}
+          path: sonar/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: reports-${{ github.run_number }}
+          path: |
+            sonar/app/build/reports/
+            sonar/app/build/outputs/mapping/release/missing_rules.txt
+          if-no-files-found: ignore
