@@ -242,7 +242,7 @@ fun SyncScreen(vm: SonarViewModel, actions: AppActions) {
             item {
                 Text(
                     when (filter) {
-                        PendingFilter.Queue -> "Nada na fila. Tudo o que você curtiu e é música já está no aparelho."
+                        PendingFilter.Queue -> if (done > 0) "Nada na fila. Tudo o que você curtiu e é música já está no aparelho." else "Nada na fila."
                         PendingFilter.Errors -> "Nenhum erro."
                         PendingFilter.Skipped -> "Nada ignorado."
                     },

@@ -20,6 +20,14 @@ músicas e toca tudo offline, num player limpo, sem anúncios.
   notificação e na tela de bloqueio; continua de onde parou.
 - Opcional: salva uma cópia em `Música/Sonar` para outros players.
 
+<p>
+  <img src="docs/screenshots/07-home.jpg" width="250" alt="Tela inicial">
+  <img src="docs/screenshots/09-player.jpg" width="250" alt="Player">
+  <img src="docs/screenshots/02-sync.jpg" width="250" alt="Sincronização">
+</p>
+
+Capturas feitas pelo teste automático no emulador, com um vídeo público de teste.
+
 ## Instalar
 
 1. Abra a aba **Actions** deste repositório, entre na última execução verde de
