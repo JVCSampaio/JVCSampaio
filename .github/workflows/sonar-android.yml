@@ -48,3 +48,64 @@ jobs:
             sonar/app/build/reports/
             sonar/app/build/outputs/mapping/release/missing_rules.txt
           if-no-files-found: ignore
+
+  # Runs the release APK on an emulator: main screens, a shared link downloaded by yt-dlp,
+  # playback. Fails on any crash. Add "[screenshots]" to a commit message to commit the
+  # screenshots to sonar/docs/screenshots.
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: sonar-apk-${{ github.run_number }}
+          path: apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: ./sonar/scripts/smoke-test.sh apk/app-x86_64-release.apk smoke
+
+      - name: Shrink screenshots
+        if: always()
+        run: |
+          sudo apt-get install -y -qq imagemagick > /dev/null
+          mkdir -p sonar/docs/screenshots
+          for f in smoke/*.png; do
+            [ -e "$f" ] && convert "$f" -resize 540x -quality 82 "sonar/docs/screenshots/$(basename "${f%.png}").jpg"
+          done
+          ls -la sonar/docs/screenshots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ github.run_number }}
+          path: smoke/
+          if-no-files-found: ignore
+
+      - name: Commit screenshots
+        if: always() && contains(github.event.head_commit.message, '[screenshots]')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add sonar/docs/screenshots
+          git commit -m "Update Sonar screenshots from the emulator smoke test" || exit 0
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"

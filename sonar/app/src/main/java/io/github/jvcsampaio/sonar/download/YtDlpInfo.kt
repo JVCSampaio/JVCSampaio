@@ -14,6 +14,8 @@ data class YtDlpInfo(
     val artist: String?,
     val album: String?,
     val durationSeconds: Double?,
+    val title: String? = null,
+    val channel: String? = null,
 ) {
     companion object {
         fun parse(text: String): YtDlpInfo {
@@ -28,6 +30,8 @@ data class YtDlpInfo(
                 artist = artists ?: obj.text("artist") ?: obj.text("creator"),
                 album = obj.text("album"),
                 durationSeconds = (obj["duration"] as? JsonPrimitive)?.doubleOrNull,
+                title = obj.text("title"),
+                channel = obj.text("channel") ?: obj.text("uploader"),
             )
         }
 

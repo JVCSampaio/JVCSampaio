@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     private val openPlayer = MutableStateFlow(false)
+    private val sharedText = MutableStateFlow<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
@@ -38,8 +39,15 @@ class MainActivity : ComponentActivity() {
             SonarTheme {
                 val vm: SonarViewModel = viewModel()
                 val open by openPlayer.collectAsStateWithLifecycle()
+                val shared by sharedText.collectAsStateWithLifecycle()
                 RequestNotificationPermission()
-                SonarRoot(vm, openPlayer = open, onPlayerOpened = { openPlayer.value = false })
+                SonarRoot(
+                    vm = vm,
+                    openPlayer = open,
+                    onPlayerOpened = { openPlayer.value = false },
+                    sharedText = shared,
+                    onSharedHandled = { sharedText.value = null },
+                )
             }
         }
     }
@@ -60,7 +68,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.getBooleanExtra(EXTRA_OPEN_PLAYER, false) == true) openPlayer.value = true
+        if (intent == null) return
+        if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayer.value = true
+        // "Share" from the YouTube or YouTube Music app.
+        if (intent.action == Intent.ACTION_SEND) {
+            intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText.value = it }
+            setIntent(Intent(this, MainActivity::class.java))
+        }
     }
 
     companion object {

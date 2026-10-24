@@ -48,17 +48,14 @@ class GoogleAuth(private val context: Context) {
     companion object {
         const val YOUTUBE_READONLY = "https://www.googleapis.com/auth/youtube.readonly"
 
-        fun describe(error: Throwable): String {
-            val api = error as? ApiException
-            return when (api?.statusCode) {
-                CommonStatusCodes.DEVELOPER_ERROR ->
-                    "O Google recusou o app (erro 10). Confira o nome do pacote e o SHA-1 no cliente OAuth do Google Cloud."
-                CommonStatusCodes.NETWORK_ERROR -> "Sem conexão com o Google. Tente de novo."
-                CommonStatusCodes.CANCELED -> "Login cancelado."
-                CommonStatusCodes.SIGN_IN_REQUIRED -> "Entre na sua conta Google para continuar."
-                null -> error.message ?: "Falha no login do Google."
-                else -> "Falha no login do Google (código ${api.statusCode})."
-            }
+        fun describe(error: Throwable): String = when (val code = (error as? ApiException)?.statusCode) {
+            CommonStatusCodes.DEVELOPER_ERROR ->
+                "O Google recusou o app (erro 10). Confira o nome do pacote e o SHA-1 no cliente OAuth do Google Cloud."
+            CommonStatusCodes.NETWORK_ERROR -> "Sem conexão com o Google. Tente de novo."
+            CommonStatusCodes.CANCELED -> "Login cancelado."
+            CommonStatusCodes.SIGN_IN_REQUIRED -> "Entre na sua conta Google para continuar."
+            null -> error.message ?: "Falha no login do Google."
+            else -> "Falha no login do Google (código $code)."
         }
     }
 }

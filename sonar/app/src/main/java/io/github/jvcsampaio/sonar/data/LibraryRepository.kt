@@ -5,12 +5,16 @@ import io.github.jvcsampaio.sonar.data.db.PlaylistSummary
 import io.github.jvcsampaio.sonar.data.db.SonarDatabase
 import io.github.jvcsampaio.sonar.data.db.TrackEntity
 import io.github.jvcsampaio.sonar.data.db.TrackStatus
+import io.github.jvcsampaio.sonar.data.youtube.VideoTitle
 import io.github.jvcsampaio.sonar.domain.FilterSettings
+import io.github.jvcsampaio.sonar.domain.MetadataCleaner
 import io.github.jvcsampaio.sonar.domain.TrackFilter
 import io.github.jvcsampaio.sonar.sync.LikeSync
 import io.github.jvcsampaio.sonar.sync.WorkScheduler
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+
+enum class ShareResult { Queued, AlreadyInLibrary }
 
 /** Library reads and the user's actions on tracks and playlists. */
 class LibraryRepository(
@@ -34,6 +38,44 @@ class LibraryRepository(
     suspend fun downloadAnyway(track: TrackEntity) {
         tracks.update(track.copy(status = TrackStatus.QUEUED, statusNote = null, manual = true, attempts = 0))
         scheduler.enqueueDownloads(settings.current().wifiOnly)
+    }
+
+    /**
+     * Queues a video shared to the app (or pasted as a link). It is not a like, so syncs never
+     * remove it, and the music filters do not apply.
+     */
+    suspend fun addShared(videoId: String, title: VideoTitle?): ShareResult {
+        val existing = tracks.getMany(listOf(videoId)).firstOrNull()
+        when {
+            existing?.status == TrackStatus.DONE -> return ShareResult.AlreadyInLibrary
+            existing != null -> tracks.update(
+                existing.copy(status = TrackStatus.QUEUED, statusNote = null, manual = true, attempts = 0),
+            )
+            else -> {
+                val song = title?.let { MetadataCleaner.clean(it.title, it.channel) }
+                val now = System.currentTimeMillis()
+                tracks.insertAll(
+                    listOf(
+                        TrackEntity(
+                            videoId = videoId,
+                            title = song?.title ?: "Música do YouTube",
+                            artist = song?.artist.orEmpty(),
+                            sourceTitle = title?.title.orEmpty(),
+                            channelTitle = title?.channel.orEmpty(),
+                            durationMs = 0,
+                            categoryId = null,
+                            thumbnailUrl = "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
+                            likedAt = now,
+                            discoveredAt = now,
+                            stillLiked = false,
+                            manual = true,
+                        ),
+                    ),
+                )
+            }
+        }
+        scheduler.enqueueDownloads(settings.current().wifiOnly)
+        return ShareResult.Queued
     }
 
     suspend fun skip(track: TrackEntity) {

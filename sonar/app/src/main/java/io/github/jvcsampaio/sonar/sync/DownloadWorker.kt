@@ -16,6 +16,8 @@ import io.github.jvcsampaio.sonar.data.db.TrackEntity
 import io.github.jvcsampaio.sonar.data.db.TrackStatus
 import io.github.jvcsampaio.sonar.download.MediaStoreExporter
 import io.github.jvcsampaio.sonar.download.YtDlpErrors
+import io.github.jvcsampaio.sonar.domain.MetadataCleaner
+import io.github.jvcsampaio.sonar.domain.SongInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
@@ -103,12 +105,18 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
             val cover = app.covers.fetch(track.videoId)
             val info = result.info
-            val fromYouTubeMusic = !info?.track.isNullOrBlank() && !info?.artist.isNullOrBlank()
+            val song = when {
+                // YouTube Music knows the real song and artist names.
+                info?.track != null && info.artist != null -> SongInfo(info.track, info.artist)
+                // Shared links may arrive without a title; yt-dlp always has one.
+                track.sourceTitle.isBlank() && info?.title != null -> MetadataCleaner.clean(info.title, info.channel.orEmpty())
+                else -> SongInfo(track.title, track.artist)
+            }
             val finished = track.copy(
                 status = TrackStatus.DONE,
                 statusNote = null,
-                title = if (fromYouTubeMusic) info!!.track!! else track.title,
-                artist = if (fromYouTubeMusic) info!!.artist!! else track.artist,
+                title = song.title,
+                artist = song.artist,
                 album = info?.album ?: track.album,
                 durationMs = info?.durationSeconds?.let { (it * 1000).toLong() } ?: track.durationMs,
                 filePath = target.absolutePath,
@@ -117,6 +125,7 @@ class DownloadWorker(context: Context, params: WorkerParameters) : CoroutineWork
                 downloadedAt = System.currentTimeMillis(),
             )
             dao.update(finished)
+            Log.i(TAG, "Downloaded ${track.videoId} as ${target.name} (${target.length()} bytes)")
             if (settings.exportToMusic && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 runCatching { MediaStoreExporter.export(applicationContext, target, finished) }
                     .onFailure { Log.w(TAG, "Export to Music failed", it) }

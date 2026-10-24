@@ -10,7 +10,7 @@ class YtDlpInfoTest {
             """{"id":"x","title":"Yellow","track":"Yellow","artists":["Coldplay"],"artist":"Coldplay",
                "album":"Parachutes","duration":269.0,"formats":[{"format_id":"251"}]}""",
         )
-        assertEquals(YtDlpInfo("Yellow", "Coldplay", "Parachutes", 269.0), info)
+        assertEquals(YtDlpInfo("Yellow", "Coldplay", "Parachutes", 269.0, title = "Yellow"), info)
     }
 
     @Test fun joinsSeveralArtists() {
@@ -20,7 +20,9 @@ class YtDlpInfoTest {
     }
 
     @Test fun plainVideoHasNoMusicFields() {
-        val info = YtDlpInfo.parse("""{"title":"Vlog","duration":600}""")
+        val info = YtDlpInfo.parse("""{"title":"Vlog","uploader":"Someone","duration":600}""")
+        assertEquals("Vlog", info.title)
+        assertEquals("Someone", info.channel)
         assertNull(info.track)
         assertNull(info.artist)
         assertEquals(600.0, info.durationSeconds!!, 0.0)

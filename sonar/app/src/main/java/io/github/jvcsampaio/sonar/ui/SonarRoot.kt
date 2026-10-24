@@ -84,7 +84,13 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
 }
 
 @Composable
-fun SonarRoot(vm: SonarViewModel, openPlayer: Boolean, onPlayerOpened: () -> Unit) {
+fun SonarRoot(
+    vm: SonarViewModel,
+    openPlayer: Boolean,
+    onPlayerOpened: () -> Unit,
+    sharedText: String?,
+    onSharedHandled: () -> Unit,
+) {
     val nav = rememberNavController()
     val player by vm.player.state.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
@@ -101,6 +107,15 @@ fun SonarRoot(vm: SonarViewModel, openPlayer: Boolean, onPlayerOpened: () -> Uni
         if (openPlayer) {
             expanded = true
             onPlayerOpened()
+        }
+    }
+
+    // Wait for the nav graph (route != null) before navigating on a cold start from "Share".
+    LaunchedEffect(sharedText, route != null) {
+        if (sharedText != null && route != null) {
+            vm.addFromLink(sharedText)
+            nav.navigateToTab(Tab.Sync)
+            onSharedHandled()
         }
     }
 

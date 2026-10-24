@@ -37,12 +37,14 @@ import io.github.jvcsampaio.sonar.data.db.artwork
 import io.github.jvcsampaio.sonar.ui.songCount
 
 @Composable
-fun NameDialog(
+fun TextInputDialog(
     title: String,
     confirmLabel: String,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     initial: String = "",
+    placeholder: String = "Nome da playlist",
+    maxLength: Int = 80,
 ) {
     var name by remember { mutableStateOf(initial) }
     AlertDialog(
@@ -51,9 +53,9 @@ fun NameDialog(
         text = {
             OutlinedTextField(
                 value = name,
-                onValueChange = { name = it.take(80) },
+                onValueChange = { name = it.take(maxLength) },
                 singleLine = true,
-                placeholder = { Text("Nome da playlist") },
+                placeholder = { Text(placeholder) },
             )
         },
         confirmButton = {
@@ -118,7 +120,7 @@ fun AddToPlaylistSheet(
         }
     }
     if (creating) {
-        NameDialog(
+        TextInputDialog(
             title = "Nova playlist",
             confirmLabel = "Criar",
             onConfirm = { name ->

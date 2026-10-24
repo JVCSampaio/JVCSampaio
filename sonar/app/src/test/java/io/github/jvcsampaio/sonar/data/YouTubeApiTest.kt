@@ -25,6 +25,15 @@ class YouTubeApiTest {
         assertEquals("https://i.ytimg.com/h.jpg", video.thumbnailUrl)
     }
 
+    @Test fun parsesOEmbed() {
+        val title = YouTubeApi.parseOEmbed(
+            """{"title":"Coldplay - Yellow (Official Video)","author_name":"Coldplay","type":"video"}""",
+        )
+        assertEquals("Coldplay - Yellow (Official Video)", title?.title)
+        assertEquals("Coldplay", title?.channel)
+        assertNull(YouTubeApi.parseOEmbed("Not Found"))
+    }
+
     @Test fun lastPageHasNoToken() {
         val page = YouTubeApi.parseVideoList("""{"items":[]}""")
         assertNull(page.nextPageToken)

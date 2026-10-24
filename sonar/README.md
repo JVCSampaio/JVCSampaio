@@ -12,6 +12,9 @@ músicas e toca tudo offline, num player limpo, sem anúncios.
 - **Organiza os nomes**: "Artista - Música (Official Video)" vira título e artista limpos;
   quando o YouTube Music informa faixa, artista e álbum, o Sonar usa esses dados.
 - **Sincroniza sozinho** em segundo plano (a cada 3, 6, 12 ou 24 h), só no Wi-Fi se você quiser.
+- **Compartilhar → Sonar**: no app do YouTube ou do YouTube Music, toque em Compartilhar e
+  escolha "Baixar no Sonar" para baixar qualquer música, mesmo sem curtir. Também dá para colar
+  um link em Sincronizar → "Baixar por link do YouTube". Isso funciona sem configurar o Google Cloud.
 - **Player**: tela inicial com curtidas recentes, mais tocadas, artistas e "Redescubra";
   biblioteca com busca sem acentos; playlists; fila; aleatório e repetir; controles na
   notificação e na tela de bloqueio; continua de onde parou.
@@ -58,6 +61,13 @@ Se o login falhar com "erro 10", o nome do pacote ou o SHA-1 do cliente Android 
 ser sempre o mesmo para o login do Google funcionar e para cada build instalar por cima do
 anterior. Para usar uma chave privada, defina `SONAR_KEYSTORE_FILE`, `SONAR_KEYSTORE_PASSWORD`,
 `SONAR_KEY_ALIAS` e `SONAR_KEY_PASSWORD` no build e cadastre o novo SHA-1 no Google Cloud.
+
+## Teste no emulador
+
+A cada push, o GitHub Actions instala o APK num emulador Android, abre as telas principais,
+compartilha um vídeo de teste (licença Creative Commons) com o app, espera o yt-dlp baixar e
+toca a música. O job falha se o app travar. Com `[screenshots]` na mensagem do commit, as
+capturas vão para `docs/screenshots/`.
 
 ## Compilar
 

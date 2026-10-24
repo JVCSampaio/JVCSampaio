@@ -5,9 +5,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.jvcsampaio.sonar.container
 import io.github.jvcsampaio.sonar.data.Settings
+import io.github.jvcsampaio.sonar.data.ShareResult
 import io.github.jvcsampaio.sonar.data.db.PlaylistSummary
 import io.github.jvcsampaio.sonar.data.db.TrackEntity
 import io.github.jvcsampaio.sonar.data.db.TrackStatus
+import io.github.jvcsampaio.sonar.domain.YouTubeLinks
 import io.github.jvcsampaio.sonar.sync.DownloadProgress
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -66,6 +68,23 @@ class SonarViewModel(application: Application) : AndroidViewModel(application) {
     fun disconnect() = launch {
         app.settings.update { it.copy(connected = false) }
         say("Conta desconectada. As músicas baixadas continuam no aparelho.")
+    }
+
+    /** A link shared from YouTube (or pasted): download it even if it is not a like. */
+    fun addFromLink(text: String) {
+        val videoId = YouTubeLinks.videoId(text)
+        if (videoId == null) {
+            say("Não encontrei um link do YouTube nesse texto")
+            return
+        }
+        launch {
+            val title = app.youtube.videoTitle(videoId)
+            val message = when (app.library.addShared(videoId, title)) {
+                ShareResult.AlreadyInLibrary -> "Essa música já está na biblioteca"
+                ShareResult.Queued -> "Na fila: ${title?.title ?: "música do YouTube"}"
+            }
+            say(message)
+        }
     }
 
     fun syncNow() = app.scheduler.syncNow()

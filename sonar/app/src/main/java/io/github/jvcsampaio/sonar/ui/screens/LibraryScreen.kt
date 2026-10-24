@@ -54,7 +54,7 @@ import io.github.jvcsampaio.sonar.ui.AppActions
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
 import io.github.jvcsampaio.sonar.ui.components.Artwork
 import io.github.jvcsampaio.sonar.ui.components.EmptyState
-import io.github.jvcsampaio.sonar.ui.components.NameDialog
+import io.github.jvcsampaio.sonar.ui.components.TextInputDialog
 import io.github.jvcsampaio.sonar.ui.components.PlayShuffleRow
 import io.github.jvcsampaio.sonar.ui.components.ScreenHeader
 import io.github.jvcsampaio.sonar.ui.components.TrackRow
@@ -237,7 +237,7 @@ fun LibraryScreen(vm: SonarViewModel, actions: AppActions) {
     }
 
     if (creating) {
-        NameDialog(
+        TextInputDialog(
             title = "Nova playlist",
             confirmLabel = "Criar",
             onConfirm = { name ->

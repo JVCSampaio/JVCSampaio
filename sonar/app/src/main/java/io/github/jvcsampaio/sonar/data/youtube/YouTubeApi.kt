@@ -71,6 +71,9 @@ class YouTubeApiException(val code: Int, val reason: String?, message: String) :
     val retryable get() = code >= 500 || reason in setOf("quotaExceeded", "dailyLimitExceeded", "RATE_LIMIT_EXCEEDED")
 }
 
+/** Title and channel of a public video, from YouTube's oEmbed endpoint (no account needed). */
+data class VideoTitle(val title: String, val channel: String)
+
 class YouTubeApi(private val http: OkHttpClient) {
 
     /** Fetches every liked video, newest like first. */
@@ -85,6 +88,21 @@ class YouTubeApi(private val http: OkHttpClient) {
             pages++
         } while (pageToken != null && pages < maxPages)
         return result.distinctBy { it.id }
+    }
+
+    suspend fun videoTitle(videoId: String): VideoTitle? = withContext(Dispatchers.IO) {
+        val url = HttpUrl.Builder()
+            .scheme("https")
+            .host("www.youtube.com")
+            .addPathSegment("oembed")
+            .addQueryParameter("url", "https://www.youtube.com/watch?v=$videoId")
+            .addQueryParameter("format", "json")
+            .build()
+        runCatching {
+            http.newCall(Request.Builder().url(url).build()).execute().use { response ->
+                if (response.isSuccessful) parseOEmbed(response.body?.string().orEmpty()) else null
+            }
+        }.getOrNull()
     }
 
     private suspend fun likedPage(accessToken: String, pageToken: String?): VideoListResponse =
@@ -118,6 +136,12 @@ class YouTubeApi(private val http: OkHttpClient) {
         private val json = Json { ignoreUnknownKeys = true }
 
         fun parseVideoList(body: String): VideoListResponse = json.decodeFromString(body)
+
+        fun parseOEmbed(body: String): VideoTitle? {
+            val obj = runCatching { json.parseToJsonElement(body).jsonObject }.getOrNull() ?: return null
+            val title = (obj["title"] as? JsonPrimitive)?.contentOrNull ?: return null
+            return VideoTitle(title, (obj["author_name"] as? JsonPrimitive)?.contentOrNull.orEmpty())
+        }
 
         fun parseError(code: Int, body: String): YouTubeApiException {
             val error = runCatching { json.parseToJsonElement(body).jsonObject["error"]?.jsonObject }.getOrNull()

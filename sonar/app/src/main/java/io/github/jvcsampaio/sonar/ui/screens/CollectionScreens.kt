@@ -44,7 +44,7 @@ import io.github.jvcsampaio.sonar.ui.AppActions
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
 import io.github.jvcsampaio.sonar.ui.components.Artwork
 import io.github.jvcsampaio.sonar.ui.components.MenuAction
-import io.github.jvcsampaio.sonar.ui.components.NameDialog
+import io.github.jvcsampaio.sonar.ui.components.TextInputDialog
 import io.github.jvcsampaio.sonar.ui.components.OverflowMenu
 import io.github.jvcsampaio.sonar.ui.components.PlayShuffleRow
 import io.github.jvcsampaio.sonar.ui.components.TrackRow
@@ -98,7 +98,7 @@ fun PlaylistScreen(id: Long, vm: SonarViewModel, actions: AppActions) {
     )
 
     if (renaming) {
-        NameDialog(
+        TextInputDialog(
             title = "Renomear playlist",
             confirmLabel = "Salvar",
             initial = name,

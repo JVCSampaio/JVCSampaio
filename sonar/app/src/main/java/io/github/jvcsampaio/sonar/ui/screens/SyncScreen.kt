@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Download
@@ -67,6 +68,7 @@ import io.github.jvcsampaio.sonar.ui.AppActions
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
 import io.github.jvcsampaio.sonar.ui.components.MenuAction
 import io.github.jvcsampaio.sonar.ui.components.ScreenHeader
+import io.github.jvcsampaio.sonar.ui.components.TextInputDialog
 import io.github.jvcsampaio.sonar.ui.components.TrackRow
 import io.github.jvcsampaio.sonar.ui.formatAgo
 import io.github.jvcsampaio.sonar.ui.formatDuration
@@ -84,6 +86,7 @@ fun SyncScreen(vm: SonarViewModel, actions: AppActions) {
     val progress by vm.downloadProgress.collectAsStateWithLifecycle()
     val waiting by vm.downloadsWaiting.collectAsStateWithLifecycle()
     var filter by rememberSaveable { mutableStateOf(PendingFilter.Queue) }
+    var addingLink by remember { mutableStateOf(false) }
 
     val connect = rememberGoogleConnect(vm)
     val done = counts[TrackStatus.DONE] ?: 0
@@ -170,6 +173,14 @@ fun SyncScreen(vm: SonarViewModel, actions: AppActions) {
         }
 
         item {
+            TextButton(onClick = { addingLink = true }, modifier = Modifier.padding(horizontal = 12.dp)) {
+                Icon(Icons.Rounded.Link, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Baixar por link do YouTube")
+            }
+        }
+
+        item {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -243,6 +254,20 @@ fun SyncScreen(vm: SonarViewModel, actions: AppActions) {
         }
 
         items(shown, key = { it.videoId }) { track -> PendingRow(track, vm) }
+    }
+
+    if (addingLink) {
+        TextInputDialog(
+            title = "Baixar por link",
+            confirmLabel = "Baixar",
+            placeholder = "https://youtu.be/…",
+            maxLength = 500,
+            onConfirm = { link ->
+                addingLink = false
+                vm.addFromLink(link)
+            },
+            onDismiss = { addingLink = false },
+        )
     }
 }
 
