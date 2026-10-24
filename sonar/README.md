@@ -30,13 +30,14 @@ Capturas feitas pelo teste automático no emulador, com um vídeo público de te
 
 ## Instalar
 
-1. Abra a aba **Actions** deste repositório, entre na última execução verde de
-   **Sonar Android** e baixe o artefato `sonar-apk-N`.
-2. Descompacte e instale `app-arm64-v8a-release.apk` (quase todo celular atual é arm64;
-   aparelhos muito antigos usam `armeabi-v7a`). O Android pede para permitir a instalação
-   de apps desta fonte.
+No celular, abra **[Sonar.apk](https://github.com/JVCSampaio/JVCSampaio/releases/download/sonar-latest/Sonar.apk)**
+e toque em **Instalar**; o Android pede para permitir a instalação de apps desta fonte.
+Celulares muito antigos (32 bits) usam
+[Sonar-celular-antigo.apk](https://github.com/JVCSampaio/JVCSampaio/releases/download/sonar-latest/Sonar-celular-antigo.apk).
 
-Cada build novo instala por cima do anterior, mantendo músicas e playlists.
+O link aponta sempre para a última versão que passou no teste do emulador
+([página da versão](https://github.com/JVCSampaio/JVCSampaio/releases/tag/sonar-latest)).
+Cada versão nova instala por cima da anterior, mantendo músicas e playlists.
 
 ## Configurar o acesso ao YouTube (uma vez, uns 10 minutos)
 

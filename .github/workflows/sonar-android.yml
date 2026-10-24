@@ -109,3 +109,41 @@ jobs:
           git commit -m "Update Sonar screenshots from the emulator smoke test" || exit 0
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"
+
+  # After the emulator test passes, the APKs go to a fixed release so the phone can download
+  # them from a stable link: releases/download/sonar-latest/Sonar.apk
+  release:
+    needs: [build, smoke]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sonar-apk-${{ github.run_number }}
+          path: apk
+
+      - name: Publish the sonar-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mv apk/app-arm64-v8a-release.apk Sonar.apk
+          mv apk/app-armeabi-v7a-release.apk Sonar-celular-antigo.apk
+          cat > notes.md <<NOTES
+          Versão 1.0.${{ github.run_number }} do Sonar, testada no emulador antes de ser publicada.
+
+          **Instalar:** baixe \`Sonar.apk\` no celular, abra e permita instalar apps desta fonte.
+          Celulares muito antigos (32 bits) usam \`Sonar-celular-antigo.apk\`.
+          Cada versão nova instala por cima da anterior, sem perder músicas nem playlists.
+
+          Para o app ler suas curtidas, siga "Configurar o acesso ao YouTube" no
+          [README](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/sonar/README.md).
+          NOTES
+          gh release delete sonar-latest --yes --cleanup-tag || true
+          gh release create sonar-latest Sonar.apk Sonar-celular-antigo.apk \
+            --target "${{ github.sha }}" \
+            --title "Sonar para Android (1.0.${{ github.run_number }})" \
+            --notes-file notes.md \
+            --prerelease
