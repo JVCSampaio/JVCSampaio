@@ -2,6 +2,7 @@ package io.github.jvcsampaio.sonar.ui
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -35,6 +36,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -66,7 +68,6 @@ import io.github.jvcsampaio.sonar.data.db.TrackEntity
 import io.github.jvcsampaio.sonar.playback.PlayerState
 import io.github.jvcsampaio.sonar.ui.components.AddToPlaylistSheet
 import io.github.jvcsampaio.sonar.ui.components.Artwork
-import io.github.jvcsampaio.sonar.ui.components.rememberArtworkColor
 import io.github.jvcsampaio.sonar.ui.screens.ArtistScreen
 import io.github.jvcsampaio.sonar.ui.screens.HomeScreen
 import io.github.jvcsampaio.sonar.ui.screens.LibraryScreen
@@ -74,7 +75,9 @@ import io.github.jvcsampaio.sonar.ui.screens.PlayerScreen
 import io.github.jvcsampaio.sonar.ui.screens.PlaylistScreen
 import io.github.jvcsampaio.sonar.ui.screens.SettingsScreen
 import io.github.jvcsampaio.sonar.ui.screens.SyncScreen
-import io.github.jvcsampaio.sonar.ui.theme.Ink
+import io.github.jvcsampaio.sonar.ui.components.Hairline
+import io.github.jvcsampaio.sonar.ui.components.ProgressLine
+import io.github.jvcsampaio.sonar.ui.theme.Meridiano
 import kotlinx.coroutines.delay
 
 private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
@@ -130,12 +133,21 @@ fun SonarRoot(
         )
     }
 
-    Box(Modifier.fillMaxSize().background(Ink)) {
+    Box(Modifier.fillMaxSize().background(Meridiano.Graphite)) {
         Scaffold(
-            containerColor = Ink,
-            snackbarHost = { SnackbarHost(snackbar) },
+            containerColor = Meridiano.Graphite,
+            snackbarHost = {
+                SnackbarHost(snackbar) { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        shape = MaterialTheme.shapes.small,
+                        containerColor = Meridiano.GraphiteHighest,
+                        contentColor = Meridiano.Ivory,
+                    )
+                }
+            },
             bottomBar = {
-                Column(Modifier.background(Ink)) {
+                Column(Modifier.background(Meridiano.Graphite)) {
                     if (player.current != null) {
                         MiniPlayer(player, vm, onOpen = { expanded = true })
                     }
@@ -207,21 +219,25 @@ private fun NavHostController.navigateToTab(tab: Tab) {
 
 @Composable
 private fun BottomBar(route: String?, onSelect: (Tab) -> Unit) {
-    NavigationBar(containerColor = Ink, tonalElevation = 0.dp) {
-        Tab.entries.forEach { tab ->
-            NavigationBarItem(
-                selected = route == tab.route,
-                onClick = { onSelect(tab) },
-                icon = { Icon(tab.icon, contentDescription = null) },
-                label = { Text(tab.label) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.onSurface,
-                    selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                    indicatorColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ),
-            )
+    Column {
+        Hairline(Modifier.fillMaxWidth())
+        NavigationBar(containerColor = Meridiano.Graphite, tonalElevation = 0.dp) {
+            Tab.entries.forEach { tab ->
+                val selected = route == tab.route
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { onSelect(tab) },
+                    icon = { Icon(tab.icon, contentDescription = null) },
+                    label = { Text(tab.label.uppercase(), style = MaterialTheme.typography.labelSmall) },
+                    colors = NavigationBarItemDefaults.colors(
+                        selectedIconColor = Meridiano.Bronze,
+                        selectedTextColor = Meridiano.Bronze,
+                        indicatorColor = Color.Transparent,
+                        unselectedIconColor = Meridiano.IvoryMuted,
+                        unselectedTextColor = Meridiano.IvoryMuted,
+                    ),
+                )
+            }
         }
     }
 }
@@ -229,7 +245,6 @@ private fun BottomBar(route: String?, onSelect: (Tab) -> Unit) {
 @Composable
 private fun MiniPlayer(state: PlayerState, vm: SonarViewModel, onOpen: () -> Unit) {
     val current = state.current ?: return
-    val tint = rememberArtworkColor(current.artwork)
     var position by remember { mutableLongStateOf(vm.player.positionMs) }
     LaunchedEffect(current.mediaId, state.isPlaying) {
         while (true) {
@@ -241,20 +256,23 @@ private fun MiniPlayer(state: PlayerState, vm: SonarViewModel, onOpen: () -> Uni
 
     Surface(
         onClick = onOpen,
-        color = tint,
-        shape = RoundedCornerShape(14.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+        color = Meridiano.GraphiteRaised,
+        contentColor = Meridiano.Ivory,
+        shape = MaterialTheme.shapes.small,
+        border = BorderStroke(1.dp, Meridiano.Line),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
     ) {
         Column {
+            ProgressLine(fraction)
             Row(Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(current.artwork, Modifier.size(44.dp), shape = RoundedCornerShape(8.dp))
+                Artwork(current.artwork, Modifier.size(42.dp), shape = MaterialTheme.shapes.extraSmall)
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(current.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         current.artist,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.7f),
+                        color = Meridiano.IvoryMuted,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -268,9 +286,6 @@ private fun MiniPlayer(state: PlayerState, vm: SonarViewModel, onOpen: () -> Uni
                 IconButton(onClick = { vm.player.next() }, enabled = state.hasNext) {
                     Icon(Icons.Rounded.SkipNext, contentDescription = "Próxima")
                 }
-            }
-            Box(Modifier.fillMaxWidth().padding(horizontal = 10.dp).height(2.dp).background(Color.White.copy(alpha = 0.15f))) {
-                Box(Modifier.fillMaxWidth(fraction).fillMaxHeight().background(Color.White))
             }
         }
     }

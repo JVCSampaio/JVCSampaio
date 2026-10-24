@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -39,6 +40,13 @@ import io.github.jvcsampaio.sonar.data.AudioFormat
 import io.github.jvcsampaio.sonar.download.MediaStoreExporter
 import io.github.jvcsampaio.sonar.ui.AppActions
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
+import io.github.jvcsampaio.sonar.ui.components.Motto
+import io.github.jvcsampaio.sonar.ui.components.ScreenHeader
+import io.github.jvcsampaio.sonar.ui.components.SecondaryButton
+import io.github.jvcsampaio.sonar.ui.components.SectionHeader
+import io.github.jvcsampaio.sonar.ui.components.SelectChip
+import io.github.jvcsampaio.sonar.ui.theme.DataStyle
+import io.github.jvcsampaio.sonar.ui.theme.Meridiano
 import io.github.jvcsampaio.sonar.ui.formatAgo
 import io.github.jvcsampaio.sonar.ui.formatBytes
 import io.github.jvcsampaio.sonar.ui.songCount
@@ -53,13 +61,13 @@ fun SettingsScreen(vm: SonarViewModel, actions: AppActions) {
 
     LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
         item {
-            Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = actions.back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar") }
-                Text("Ajustes", style = MaterialTheme.typography.titleLarge)
             }
+            ScreenHeader("Ajustes", kicker = "Meridiano / Sonar · Parâmetros")
         }
 
-        item { Group("Formato do áudio") }
+        item { SectionHeader("Formato do áudio", index = 1) }
         AudioFormat.entries.forEach { format ->
             item(key = format.name) {
                 Row(
@@ -68,7 +76,11 @@ fun SettingsScreen(vm: SonarViewModel, actions: AppActions) {
                         .padding(horizontal = 12.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    RadioButton(selected = settings.audioFormat == format, onClick = { vm.updateSettings { it.copy(audioFormat = format) } })
+                    RadioButton(
+                        selected = settings.audioFormat == format,
+                        onClick = { vm.updateSettings { it.copy(audioFormat = format) } },
+                        colors = RadioButtonDefaults.colors(selectedColor = Meridiano.Bronze, unselectedColor = Meridiano.IvoryMuted),
+                    )
                     Column(Modifier.weight(1f).padding(start = 4.dp)) {
                         Text(format.label, style = MaterialTheme.typography.titleSmall)
                         Text(format.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -78,7 +90,7 @@ fun SettingsScreen(vm: SonarViewModel, actions: AppActions) {
         }
         item { Note("Vale para os próximos downloads. As músicas já baixadas não mudam.") }
 
-        item { Group("Downloads") }
+        item { SectionHeader("Downloads", index = 2) }
         item {
             SwitchRow("Baixar só no Wi-Fi", "Evita gastar o plano de dados.", settings.wifiOnly, onChange = vm::setWifiOnly)
         }
@@ -92,7 +104,7 @@ fun SettingsScreen(vm: SonarViewModel, actions: AppActions) {
             ) { value -> vm.updateSettings { it.copy(exportToMusic = value) } }
         }
 
-        item { Group("O que baixar") }
+        item { SectionHeader("O que baixar", index = 3) }
         item {
             SwitchRow(
                 "Só a categoria Música do YouTube",
@@ -114,7 +126,7 @@ fun SettingsScreen(vm: SonarViewModel, actions: AppActions) {
             ) { value -> vm.updateSettings { it.copy(maxDurationMinutes = value) } }
         }
 
-        item { Group("Sincronização") }
+        item { SectionHeader("Sincronização", index = 4) }
         item {
             SwitchRow(
                 "Buscar curtidas automaticamente",
@@ -140,59 +152,57 @@ fun SettingsScreen(vm: SonarViewModel, actions: AppActions) {
             ) { value -> vm.updateSettings { it.copy(removeUnliked = value) } }
         }
 
-        item { Group("Motor de download") }
+        item { SectionHeader("Motor de download", index = 5) }
         item {
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("yt-dlp", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        engineVersion?.let { "Versão $it" } ?: "Versão embutida no app (atualiza no primeiro download)",
-                        style = MaterialTheme.typography.bodySmall,
+                        engineVersion?.let { "versão $it" } ?: "versão embutida (atualiza no primeiro download)",
+                        style = DataStyle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                OutlinedButton(onClick = vm::updateEngine, enabled = !engineUpdating) {
-                    if (engineUpdating) {
-                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                    }
-                    Text("Atualizar")
+                if (engineUpdating) {
+                    CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), strokeWidth = 2.dp, color = Meridiano.Mineral)
+                } else {
+                    SecondaryButton("Atualizar", vm::updateEngine)
                 }
             }
         }
         item { Note("O YouTube muda com frequência; o Sonar atualiza o yt-dlp sozinho uma vez por dia.") }
 
-        item { Group("Armazenamento") }
+        item { SectionHeader("Armazenamento", index = 6) }
         item {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text("${songCount(tracks.size)} no aparelho", style = MaterialTheme.typography.titleSmall)
-                Text(formatBytes(bytes), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatBytes(bytes), style = DataStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
-        item { Group("Sobre") }
+        item { SectionHeader("Sobre", index = 7) }
         item {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                Text("Sonar ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.height(4.dp))
+                Text("Sonar", style = MaterialTheme.typography.titleLarge)
+                Text("versão ${BuildConfig.VERSION_NAME}", style = DataStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    "App pessoal. Baixe só para uso próprio e respeite os direitos dos artistas e os termos do YouTube.",
+                    "Identidade MERIDIANO: racionalismo monumental, humanismo tecnológico, engenharia de precisão. " +
+                        "A forma serve à finalidade.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "App pessoal. Baixe só para uso próprio e respeite os direitos dos artistas e os termos do YouTube. " +
+                        "Tipografia IBM Plex (SIL Open Font License).",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+        item { Motto() }
     }
-}
-
-@Composable
-private fun Group(title: String) {
-    Text(
-        title,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 6.dp),
-    )
 }
 
 @Composable
@@ -227,7 +237,13 @@ private fun SwitchRow(
             checked = checked,
             onCheckedChange = onChange,
             enabled = enabled,
-            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary),
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = Meridiano.Bronze,
+                checkedThumbColor = Meridiano.Graphite,
+                uncheckedTrackColor = Meridiano.GraphiteHigh,
+                uncheckedBorderColor = Meridiano.Line,
+                uncheckedThumbColor = Meridiano.IvoryMuted,
+            ),
         )
     }
 }
@@ -247,16 +263,7 @@ private fun <T> Choices(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             options.forEach { option ->
-                FilterChip(
-                    selected = option == selected,
-                    onClick = { onSelect(option) },
-                    label = { Text(label(option)) },
-                    shape = CircleShape,
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                    ),
-                )
+                SelectChip(label(option), selected = option == selected, onClick = { onSelect(option) })
             }
         }
     }

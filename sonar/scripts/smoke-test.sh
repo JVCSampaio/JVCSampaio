@@ -53,10 +53,10 @@ adb shell am start -W -n "$PKG/.MainActivity"
 sleep 4
 shot 01-home
 
-tap "Sincronizar" && shot 02-sync
+tap "SINCRONIZAR" && shot 02-sync
 tap "Ajustes" && shot 03-settings
 adb shell input keyevent KEYCODE_BACK
-tap "Biblioteca" && shot 04-library-empty
+tap "BIBLIOTECA" && shot 04-library-empty
 
 result="none"
 for id in $VIDEOS; do
@@ -77,9 +77,9 @@ done
 adb logcat -d -s DownloadWorker:* | tail -20
 shot 06-sync-after
 
-tap "Início" && shot 07-home
+tap "INÍCIO" && shot 07-home
 if [ "$result" = "downloaded" ]; then
-  tap "Tocar" && shot 08-playing
+  tap "TOCAR" && shot 08-playing
   adb shell am start -n "$PKG/.MainActivity" --ez open_player true
   shot 09-player
   adb shell dumpsys media_session | grep -E "state=PlaybackState|description=" | head -4

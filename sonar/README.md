@@ -28,6 +28,31 @@ músicas e toca tudo offline, num player limpo, sem anúncios.
 
 Capturas feitas pelo teste automático no emulador, com um vídeo público de teste.
 
+## Identidade visual: MERIDIANO
+
+*Forma servit fini* — a forma serve à finalidade. Racionalismo monumental, humanismo
+tecnológico, engenharia de precisão.
+
+| Cor | Hex | Papel |
+| --- | --- | --- |
+| Grafite naval | `#121C24` | base de tudo |
+| Cerâmica marfim | `#DAD6C9` | texto e estruturas |
+| Bronze fosco | `#B49363` | hierarquia: ações principais, eixo, numeração |
+| Verde mineral | `#709B9D` | sistemas ativos: o que toca, o que está baixando |
+| Vermelho crítico | `#963F3C` | só alertas, nunca grandes superfícies |
+
+- **Tipografia:** IBM Plex Serif nos títulos, IBM Plex Mono nos rótulos e leituras técnicas
+  (contadores, tempos, estados), a fonte do sistema no texto corrido. Licença SIL OFL em
+  `licenses/IBM-Plex-OFL.txt`.
+- **Emblema:** um eixo orientador (a finalidade), uma moldura e uma estrutura interna que
+  convergem para ele (os meios) e um núcleo de bronze (onde conhecimento e ação se encontram).
+  A moldura é aberta no alto: o sistema pode ser aperfeiçoado. É o ícone do app.
+- **Linguagem:** cantos quase retos, divisórias finas, seções numeradas ("01 — CURTIDAS
+  RECENTES"), marcas de registro em volta das capas e uma grade de prancheta atrás do player.
+- **Interface que mostra a arquitetura:** a tela de sincronização é um painel de operação com
+  as três etapas do sistema — *Intellectus* (descoberta das curtidas), *Ars* (extração do
+  áudio) e *Prudentia* (verificação) — cada uma com seu estado ao vivo.
+
 ## Instalar
 
 No celular, abra **[Sonar.apk](https://github.com/JVCSampaio/JVCSampaio/releases/download/sonar-latest/Sonar.apk)**

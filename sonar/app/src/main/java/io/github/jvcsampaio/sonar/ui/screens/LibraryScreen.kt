@@ -54,6 +54,9 @@ import io.github.jvcsampaio.sonar.ui.AppActions
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
 import io.github.jvcsampaio.sonar.ui.components.Artwork
 import io.github.jvcsampaio.sonar.ui.components.EmptyState
+import io.github.jvcsampaio.sonar.ui.components.MonoLabel
+import io.github.jvcsampaio.sonar.ui.components.SelectChip
+import io.github.jvcsampaio.sonar.ui.theme.Meridiano
 import io.github.jvcsampaio.sonar.ui.components.TextInputDialog
 import io.github.jvcsampaio.sonar.ui.components.PlayShuffleRow
 import io.github.jvcsampaio.sonar.ui.components.ScreenHeader
@@ -93,7 +96,7 @@ fun LibraryScreen(vm: SonarViewModel, actions: AppActions) {
     }
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { ScreenHeader("Biblioteca", subtitle = songCount(tracks.size)) }
+        item { ScreenHeader("Biblioteca", kicker = "Acervo", subtitle = songCount(tracks.size)) }
         item {
             TextField(
                 value = query,
@@ -106,12 +109,13 @@ fun LibraryScreen(vm: SonarViewModel, actions: AppActions) {
                     }
                 },
                 singleLine = true,
-                shape = CircleShape,
+                shape = MaterialTheme.shapes.small,
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    focusedIndicatorColor = Meridiano.Bronze,
+                    unfocusedIndicatorColor = Meridiano.Line,
+                    cursorColor = Meridiano.Bronze,
                 ),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
             )
@@ -122,16 +126,7 @@ fun LibraryScreen(vm: SonarViewModel, actions: AppActions) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 LibraryTab.entries.forEach { option ->
-                    FilterChip(
-                        selected = tab == option,
-                        onClick = { tab = option },
-                        label = { Text(option.label) },
-                        shape = CircleShape,
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                    )
+                    SelectChip(option.label, selected = tab == option, onClick = { tab = option })
                 }
             }
         }
@@ -141,10 +136,9 @@ fun LibraryScreen(vm: SonarViewModel, actions: AppActions) {
                 if (tracks.isEmpty()) {
                     item {
                         EmptyState(
-                            icon = Icons.Rounded.LibraryMusic,
                             title = "Nada por aqui ainda",
                             body = "As músicas aparecem assim que o download termina.",
-                            actionLabel = "Ver sincronização",
+                            actionLabel = "Ver operação",
                             onAction = actions.openSync,
                         )
                     }
@@ -156,7 +150,7 @@ fun LibraryScreen(vm: SonarViewModel, actions: AppActions) {
                         ) {
                             SortMenu(sort) { sort = it }
                             Spacer(Modifier.weight(1f))
-                            Text(songCount(songs.size), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            MonoLabel(songCount(songs.size))
                         }
                     }
                     item {
@@ -256,7 +250,7 @@ private fun SortMenu(current: SongSort, onSelect: (SongSort) -> Unit) {
         TextButton(onClick = { open = true }) {
             Icon(Icons.AutoMirrored.Rounded.Sort, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
-            Text(current.label)
+            Text(current.label.uppercase())
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             SongSort.entries.forEach { option ->

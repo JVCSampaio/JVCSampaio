@@ -52,7 +52,9 @@ import io.github.jvcsampaio.sonar.ui.components.rememberArtworkColor
 import io.github.jvcsampaio.sonar.ui.formatTotalDuration
 import io.github.jvcsampaio.sonar.ui.songActions
 import io.github.jvcsampaio.sonar.ui.songCount
-import io.github.jvcsampaio.sonar.ui.theme.Ink
+import io.github.jvcsampaio.sonar.ui.components.MonoLabel
+import io.github.jvcsampaio.sonar.ui.components.cornerMarks
+import io.github.jvcsampaio.sonar.ui.theme.Meridiano
 
 @Composable
 fun ArtistScreen(name: String, vm: SonarViewModel, actions: AppActions) {
@@ -65,6 +67,7 @@ fun ArtistScreen(name: String, vm: SonarViewModel, actions: AppActions) {
         coverShape = CircleShape,
         vm = vm,
         actions = actions,
+        kicker = "Artista",
         rowActions = { songActions(it, vm, actions, showArtist = false) },
     )
 }
@@ -81,9 +84,10 @@ fun PlaylistScreen(id: Long, vm: SonarViewModel, actions: AppActions) {
         title = name,
         tracks = tracks,
         cover = tracks.firstOrNull()?.artwork,
-        coverShape = MaterialTheme.shapes.medium,
+        coverShape = MaterialTheme.shapes.small,
         vm = vm,
         actions = actions,
+        kicker = "Playlist",
         headerActions = listOf(
             MenuAction("Renomear", Icons.Rounded.Edit) { renaming = true },
             MenuAction("Apagar playlist", Icons.Rounded.Delete) { deleting = true },
@@ -136,6 +140,7 @@ private fun CollectionScreen(
     vm: SonarViewModel,
     actions: AppActions,
     rowActions: (TrackEntity) -> List<MenuAction>,
+    kicker: String,
     headerActions: List<MenuAction> = emptyList(),
     emptyText: String = "Nenhuma música baixada.",
 ) {
@@ -145,7 +150,7 @@ private fun CollectionScreen(
 
     LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(tint, Ink)))) {
+            Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(tint, Meridiano.Graphite)))) {
                 Column(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = actions.back) {
@@ -154,8 +159,11 @@ private fun CollectionScreen(
                         Spacer(Modifier.weight(1f))
                         if (headerActions.isNotEmpty()) OverflowMenu(headerActions)
                     }
-                    Artwork(cover, Modifier.size(200.dp), shape = coverShape, iconSize = 56.dp)
-                    Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Artwork(cover, Modifier.size(196.dp).cornerMarks(), shape = coverShape, iconSize = 56.dp)
+                    Spacer(Modifier.height(26.dp))
+                    MonoLabel(kicker, color = Meridiano.Bronze, style = MaterialTheme.typography.labelSmall)
+                    Spacer(Modifier.height(6.dp))
                     Text(
                         title,
                         style = MaterialTheme.typography.headlineMedium,
@@ -164,11 +172,8 @@ private fun CollectionScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(horizontal = 24.dp),
                     )
-                    Text(
-                        if (tracks.isEmpty()) songCount(0) else "${songCount(tracks.size)} · ${formatTotalDuration(totalMs)}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(alpha = 0.7f),
-                    )
+                    Spacer(Modifier.height(4.dp))
+                    MonoLabel(if (tracks.isEmpty()) songCount(0) else "${songCount(tracks.size)} · ${formatTotalDuration(totalMs)}")
                 }
             }
         }

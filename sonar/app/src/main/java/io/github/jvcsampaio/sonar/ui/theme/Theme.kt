@@ -7,61 +7,102 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.jvcsampaio.sonar.R
 
-val Coral = Color(0xFFFF6B4A)
-val Ink = Color(0xFF0D0D11)
+/**
+ * MERIDIANO: monumental rationalism. Graphite is the base, ivory carries the text, bronze marks
+ * hierarchy, mineral green is reserved for active systems and red only for alerts.
+ */
+object Meridiano {
+    val Graphite = Color(0xFF121C24)
+    val GraphiteRaised = Color(0xFF17232D)
+    val GraphiteHigh = Color(0xFF1D2A35)
+    val GraphiteHighest = Color(0xFF24333F)
+    val Line = Color(0xFF2B3A46)
+    val Ivory = Color(0xFFDAD6C9)
+    val IvoryMuted = Color(0xFF949792)
+    val Bronze = Color(0xFFB49363)
+    val Mineral = Color(0xFF709B9D)
+    val Critical = Color(0xFF963F3C)
+    /** Critical red lifted enough to be read as text on graphite. */
+    val CriticalText = Color(0xFFC9817B)
+}
+
+val SerifFamily = FontFamily(
+    Font(R.font.plex_serif_regular, FontWeight.Normal),
+    Font(R.font.plex_serif_medium, FontWeight.Medium),
+    Font(R.font.plex_serif_semibold, FontWeight.SemiBold),
+)
+
+val MonoFamily = FontFamily(
+    Font(R.font.plex_mono_regular, FontWeight.Normal),
+    Font(R.font.plex_mono_medium, FontWeight.Medium),
+    Font(R.font.plex_mono_semibold, FontWeight.SemiBold),
+)
+
+/** Technical readouts: counters, times, states. */
+val DataStyle = TextStyle(fontFamily = MonoFamily, fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 0.4.sp)
 
 private val Colors = darkColorScheme(
-    primary = Coral,
-    onPrimary = Color(0xFF1B0B06),
-    primaryContainer = Color(0xFF3A1A12),
-    onPrimaryContainer = Color(0xFFFFDBD1),
-    secondary = Color(0xFFB8B3FF),
-    onSecondary = Color(0xFF16132E),
-    tertiary = Color(0xFF7FE0C3),
-    background = Ink,
-    onBackground = Color(0xFFF4F3F8),
-    surface = Ink,
-    onSurface = Color(0xFFF4F3F8),
-    surfaceVariant = Color(0xFF1C1C24),
-    onSurfaceVariant = Color(0xFF9D9BAA),
-    surfaceContainerLowest = Color(0xFF09090C),
-    surfaceContainerLow = Color(0xFF121217),
-    surfaceContainer = Color(0xFF16161C),
-    surfaceContainerHigh = Color(0xFF1D1D25),
-    surfaceContainerHighest = Color(0xFF26262F),
-    outline = Color(0xFF3A3A46),
-    outlineVariant = Color(0xFF26262F),
-    error = Color(0xFFFF6B6B),
+    primary = Meridiano.Bronze,
+    onPrimary = Meridiano.Graphite,
+    primaryContainer = Color(0xFF3A3226),
+    onPrimaryContainer = Color(0xFFE6D3B3),
+    secondary = Meridiano.Mineral,
+    onSecondary = Meridiano.Graphite,
+    tertiary = Meridiano.Mineral,
+    onTertiary = Meridiano.Graphite,
+    background = Meridiano.Graphite,
+    onBackground = Meridiano.Ivory,
+    surface = Meridiano.Graphite,
+    onSurface = Meridiano.Ivory,
+    surfaceVariant = Meridiano.GraphiteHigh,
+    onSurfaceVariant = Meridiano.IvoryMuted,
+    surfaceContainerLowest = Color(0xFF0E161D),
+    surfaceContainerLow = Meridiano.GraphiteRaised,
+    surfaceContainer = Meridiano.GraphiteRaised,
+    surfaceContainerHigh = Meridiano.GraphiteHigh,
+    surfaceContainerHighest = Meridiano.GraphiteHighest,
+    inverseSurface = Meridiano.Ivory,
+    inverseOnSurface = Meridiano.Graphite,
+    outline = Color(0xFF3A4A57),
+    outlineVariant = Meridiano.Line,
+    error = Meridiano.Critical,
+    onError = Meridiano.Ivory,
+    scrim = Color(0xCC0B1218),
 )
 
 private val Base = Typography()
 
 private val SonarTypography = Typography(
-    displaySmall = Base.displaySmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp),
-    headlineLarge = Base.headlineLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp),
-    headlineMedium = Base.headlineMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp),
-    headlineSmall = Base.headlineSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp),
-    titleLarge = Base.titleLarge.copy(fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+    displaySmall = Base.displaySmall.copy(fontFamily = SerifFamily, fontWeight = FontWeight.Medium, letterSpacing = (-0.5).sp),
+    headlineLarge = Base.headlineLarge.copy(fontFamily = SerifFamily, fontWeight = FontWeight.Medium, letterSpacing = (-0.4).sp),
+    headlineMedium = Base.headlineMedium.copy(fontFamily = SerifFamily, fontWeight = FontWeight.Medium, letterSpacing = (-0.3).sp),
+    headlineSmall = Base.headlineSmall.copy(fontFamily = SerifFamily, fontWeight = FontWeight.Medium, letterSpacing = (-0.2).sp),
+    titleLarge = Base.titleLarge.copy(fontFamily = SerifFamily, fontWeight = FontWeight.Medium),
     titleMedium = Base.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-    titleSmall = Base.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+    titleSmall = Base.titleSmall.copy(fontWeight = FontWeight.Medium, fontSize = 15.sp),
     bodyLarge = Base.bodyLarge,
     bodyMedium = Base.bodyMedium,
     bodySmall = Base.bodySmall,
-    labelLarge = Base.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-    labelMedium = Base.labelMedium.copy(fontWeight = FontWeight.Medium),
-    labelSmall = Base.labelSmall,
+    labelLarge = Base.labelLarge.copy(fontFamily = MonoFamily, fontWeight = FontWeight.Medium, fontSize = 13.sp, letterSpacing = 1.2.sp),
+    labelMedium = Base.labelMedium.copy(fontFamily = MonoFamily, fontWeight = FontWeight.Medium, fontSize = 11.sp, letterSpacing = 1.4.sp),
+    labelSmall = Base.labelSmall.copy(fontFamily = MonoFamily, fontWeight = FontWeight.Normal, fontSize = 10.sp, letterSpacing = 1.4.sp),
 )
 
+/** Architectural corners: precise, barely softened. */
 private val SonarShapes = Shapes(
-    extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(32.dp),
+    extraSmall = RoundedCornerShape(2.dp),
+    small = RoundedCornerShape(3.dp),
+    medium = RoundedCornerShape(4.dp),
+    large = RoundedCornerShape(6.dp),
+    extraLarge = RoundedCornerShape(8.dp),
 )
 
 @Composable

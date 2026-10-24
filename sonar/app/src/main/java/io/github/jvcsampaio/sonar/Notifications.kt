@@ -21,6 +21,7 @@ object Notifications {
     const val CHANNEL_SYNC = "sync"
     const val ID_DOWNLOADS = 1001
     private const val ID_SYNC = 1002
+    private val BRONZE = 0xFFB49363.toInt()
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -38,6 +39,7 @@ object Notifications {
         val pause = WorkManager.getInstance(context).createCancelPendingIntent(workId)
         return NotificationCompat.Builder(context, CHANNEL_DOWNLOADS)
             .setSmallIcon(R.drawable.ic_stat_sonar)
+            .setColor(BRONZE)
             .setContentTitle(title)
             .setContentText(text ?: "Baixando suas curtidas")
             .setContentIntent(openApp(context))
@@ -55,6 +57,7 @@ object Notifications {
         if (!canNotify(context)) return
         val notification = NotificationCompat.Builder(context, CHANNEL_SYNC)
             .setSmallIcon(R.drawable.ic_stat_sonar)
+            .setColor(BRONZE)
             .setContentTitle("Sonar precisa de você")
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
