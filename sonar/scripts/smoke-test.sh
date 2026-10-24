@@ -53,8 +53,8 @@ adb shell am start -W -n "$PKG/.MainActivity"
 sleep 4
 shot 01-home
 
-tap "SINCRONIZAR" && shot 02-sync
-tap "Ajustes" && shot 03-settings
+tap "OFICINA" && shot 02-sync
+tap "AJUSTES" && shot 03-settings
 adb shell input keyevent KEYCODE_BACK
 tap "BIBLIOTECA" && shot 04-library-empty
 
@@ -83,7 +83,14 @@ if [ "$result" = "downloaded" ]; then
   adb shell am start -n "$PKG/.MainActivity" --ez open_player true
   shot 09-player
   adb shell dumpsys media_session | grep -E "state=PlaybackState|description=" | head -4
+  adb shell input keyevent KEYCODE_BACK
+  tap "BIBLIOTECA" && shot 10-library
 fi
+# The settings end with the identification plate (Placa) and its seal.
+tap "OFICINA" && tap "AJUSTES" && {
+  for _ in 1 2 3 4 5 6; do adb shell input swipe 540 1900 540 500 250; sleep 1; done
+  shot 11-settings-placa
+}
 
 adb logcat -d > "$OUT/logcat.txt"
 if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt"; then

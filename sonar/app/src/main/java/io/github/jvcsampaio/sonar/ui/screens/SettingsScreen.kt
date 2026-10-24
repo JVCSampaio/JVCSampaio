@@ -1,270 +1,227 @@
 package io.github.jvcsampaio.sonar.ui.screens
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.jvcsampaio.sonar.BuildConfig
 import io.github.jvcsampaio.sonar.data.AudioFormat
+import io.github.jvcsampaio.sonar.data.db.TrackStatus
 import io.github.jvcsampaio.sonar.download.MediaStoreExporter
 import io.github.jvcsampaio.sonar.ui.AppActions
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
-import io.github.jvcsampaio.sonar.ui.components.Motto
-import io.github.jvcsampaio.sonar.ui.components.ScreenHeader
-import io.github.jvcsampaio.sonar.ui.components.SecondaryButton
-import io.github.jvcsampaio.sonar.ui.components.SectionHeader
-import io.github.jvcsampaio.sonar.ui.components.SelectChip
-import io.github.jvcsampaio.sonar.ui.theme.DataStyle
-import io.github.jvcsampaio.sonar.ui.theme.Meridiano
+import io.github.jvcsampaio.sonar.ui.components.Botao
+import io.github.jvcsampaio.sonar.ui.components.BotaoGlifo
+import io.github.jvcsampaio.sonar.ui.components.Cabecalho
+import io.github.jvcsampaio.sonar.ui.components.Chave
+import io.github.jvcsampaio.sonar.ui.components.Colofao
+import io.github.jvcsampaio.sonar.ui.components.Escolhas
+import io.github.jvcsampaio.sonar.ui.components.Estado
+import io.github.jvcsampaio.sonar.ui.components.Fio
+import io.github.jvcsampaio.sonar.ui.components.Glifo
+import io.github.jvcsampaio.sonar.ui.components.Indicador
+import io.github.jvcsampaio.sonar.ui.components.Leitura
+import io.github.jvcsampaio.sonar.ui.components.Painel
+import io.github.jvcsampaio.sonar.ui.components.Placa
+import io.github.jvcsampaio.sonar.ui.components.Rotulo
+import io.github.jvcsampaio.sonar.ui.components.SeloCompacto
 import io.github.jvcsampaio.sonar.ui.formatAgo
 import io.github.jvcsampaio.sonar.ui.formatBytes
-import io.github.jvcsampaio.sonar.ui.songCount
+import io.github.jvcsampaio.sonar.ui.formatData
+import io.github.jvcsampaio.sonar.ui.theme.M
+import io.github.jvcsampaio.sonar.ui.theme.Passo
+import io.github.jvcsampaio.sonar.ui.theme.Tipo
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(vm: SonarViewModel, actions: AppActions) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
+    val counts by vm.counts.collectAsStateWithLifecycle()
     val bytes by vm.storageBytes.collectAsStateWithLifecycle()
     val engineVersion by vm.engineVersion.collectAsStateWithLifecycle()
     val engineUpdating by vm.engineUpdating.collectAsStateWithLifecycle()
+    val cores = M.cores
+    val done = counts[TrackStatus.DONE] ?: 0
+    val verified = done > 0 && (counts[TrackStatus.FAILED] ?: 0) == 0 &&
+        (counts[TrackStatus.QUEUED] ?: 0) + (counts[TrackStatus.DOWNLOADING] ?: 0) == 0
 
-    LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
+    LazyColumn(contentPadding = PaddingValues(bottom = Passo.p5), verticalArrangement = Arrangement.spacedBy(Passo.p5)) {
         item {
-            Row(Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = actions.back) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar") }
+            Column {
+                BotaoGlifo(Glifo.Voltar, "Voltar", actions.back, Modifier.padding(start = Passo.p1, top = Passo.p1))
+                Cabecalho(
+                    "Ordinatio",
+                    finalidade = "Ajustar como o Sonar escolhe, extrai e guarda as músicas.",
+                    local = "Sonar · ajustes",
+                )
             }
-            ScreenHeader("Ajustes", kicker = "Meridiano / Sonar · Parâmetros")
         }
 
-        item { SectionHeader("Formato do áudio", index = 1) }
-        AudioFormat.entries.forEach { format ->
-            item(key = format.name) {
-                Row(
-                    Modifier.fillMaxWidth()
-                        .clickable { vm.updateSettings { it.copy(audioFormat = format) } }
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    RadioButton(
-                        selected = settings.audioFormat == format,
-                        onClick = { vm.updateSettings { it.copy(audioFormat = format) } },
-                        colors = RadioButtonDefaults.colors(selectedColor = Meridiano.Bronze, unselectedColor = Meridiano.IvoryMuted),
-                    )
-                    Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                        Text(format.label, style = MaterialTheme.typography.titleSmall)
-                        Text(format.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        item {
+            Parametros(nome = "Formato do áudio", id = "P-01") {
+                Escolhas(AudioFormat.entries, settings.audioFormat, rotulo = { it.label }) { format ->
+                    vm.updateSettings { it.copy(audioFormat = format) }
+                }
+                Spacer(Modifier.height(Passo.p4))
+                Text(settings.audioFormat.description, style = Tipo.corpo, color = cores.tinta)
+                Text("Vale para as próximas extrações; as músicas já gravadas não mudam.", style = Tipo.nota, color = cores.tintaSuave)
+            }
+        }
+
+        item {
+            Parametros(nome = "Downloads", id = "P-02") {
+                Chave("Baixar só no Wi-Fi", "Não gasta o plano de dados.", settings.wifiOnly, onChange = vm::setWifiOnly)
+                Fio(Modifier.fillMaxWidth())
+                Chave(
+                    titulo = "Guardar cópia na pasta Música",
+                    descricao = if (MediaStoreExporter.supported) "Em Música/Sonar: outros players leem, e a cópia fica se o app sair."
+                    else "Precisa do Android 10 ou mais novo.",
+                    ligada = settings.exportToMusic && MediaStoreExporter.supported,
+                    enabled = MediaStoreExporter.supported,
+                ) { value -> vm.updateSettings { it.copy(exportToMusic = value) } }
+            }
+        }
+
+        item {
+            Parametros(nome = "Seleção", id = "P-03") {
+                Chave(
+                    "Só a categoria Música",
+                    "Desligada, extrai o áudio de qualquer vídeo curtido.",
+                    settings.musicOnly,
+                ) { value -> vm.updateSettings { it.copy(musicOnly = value) } }
+                Fio(Modifier.fillMaxWidth())
+                Chave("Ignorar vídeos de até 1 min", "Shorts e trechos curtos.", settings.skipShort) { value ->
+                    vm.updateSettings { it.copy(skipShort = value) }
+                }
+                Fio(Modifier.fillMaxWidth())
+                Spacer(Modifier.height(Passo.p4))
+                Rotulo("Duração máxima", Modifier.padding(bottom = Passo.p3))
+                Escolhas(
+                    opcoes = listOf(10, 15, 20, 30, 60, 0),
+                    selecionada = settings.maxDurationMinutes,
+                    rotulo = { if (it == 0) "Sem limite" else "$it min" },
+                ) { value -> vm.updateSettings { it.copy(maxDurationMinutes = value) } }
+            }
+        }
+
+        item {
+            Parametros(nome = "Sincronização", id = "P-04") {
+                Chave(
+                    "Ler curtidas sozinho",
+                    if (settings.lastSyncAt > 0) "Última leitura ${formatAgo(settings.lastSyncAt)}, em ${formatData(settings.lastSyncAt)}."
+                    else "Em segundo plano, com a bateria em bom nível.",
+                    settings.autoSync,
+                ) { value -> vm.updateSettings { it.copy(autoSync = value) } }
+                if (settings.autoSync) {
+                    Rotulo("Intervalo", Modifier.padding(top = Passo.p2, bottom = Passo.p3))
+                    Escolhas(listOf(3, 6, 12, 24), settings.syncIntervalHours, rotulo = { "$it h" }) { value ->
+                        vm.updateSettings { it.copy(syncIntervalHours = value) }
+                    }
+                    Spacer(Modifier.height(Passo.p4))
+                }
+                Fio(Modifier.fillMaxWidth())
+                Chave(
+                    "Apagar o que eu descurtir",
+                    "Ao tirar o gostei no YouTube, a música sai do aparelho.",
+                    settings.removeUnliked,
+                ) { value -> vm.updateSettings { it.copy(removeUnliked = value) } }
+            }
+        }
+
+        item {
+            Parametros(nome = "Aparência", id = "P-05") {
+                Escolhas(listOf(false, true), settings.meioDia, rotulo = { if (it) "Meio-dia" else "Meia-noite" }) { value ->
+                    vm.updateSettings { it.copy(meioDia = value) }
+                }
+                Spacer(Modifier.height(Passo.p4))
+                Text(
+                    "Meia-noite é o padrão das telas. Meio-dia serve à leitura sob luz forte.",
+                    style = Tipo.nota,
+                    color = cores.tintaSuave,
+                )
+            }
+        }
+
+        item {
+            Parametros(nome = "Motor de extração", id = "P-06") {
+                Leitura(
+                    rotulo = "yt-dlp",
+                    valor = engineVersion ?: "—",
+                    referencia = if (engineVersion != null) "verificado uma vez por dia" else "versão embutida; atualiza na primeira extração",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(Passo.p4))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Passo.p5)) {
+                    if (engineUpdating) {
+                        Indicador(Estado.Atencao, "Atualizando")
+                    } else {
+                        Botao("Atualizar", vm::updateEngine)
                     }
                 }
-            }
-        }
-        item { Note("Vale para os próximos downloads. As músicas já baixadas não mudam.") }
-
-        item { SectionHeader("Downloads", index = 2) }
-        item {
-            SwitchRow("Baixar só no Wi-Fi", "Evita gastar o plano de dados.", settings.wifiOnly, onChange = vm::setWifiOnly)
-        }
-        item {
-            SwitchRow(
-                title = "Salvar cópia na pasta Música",
-                subtitle = if (MediaStoreExporter.supported) "Em Música/Sonar, para outros players e para não perder ao desinstalar."
-                else "Precisa do Android 10 ou mais novo.",
-                checked = settings.exportToMusic && MediaStoreExporter.supported,
-                enabled = MediaStoreExporter.supported,
-            ) { value -> vm.updateSettings { it.copy(exportToMusic = value) } }
-        }
-
-        item { SectionHeader("O que baixar", index = 3) }
-        item {
-            SwitchRow(
-                "Só a categoria Música do YouTube",
-                "Desligue para baixar o áudio de qualquer vídeo que você curtir.",
-                settings.musicOnly,
-            ) { value -> vm.updateSettings { it.copy(musicOnly = value) } }
-        }
-        item {
-            SwitchRow("Ignorar vídeos de até 1 minuto", "Shorts e trechos curtos.", settings.skipShort) { value ->
-                vm.updateSettings { it.copy(skipShort = value) }
-            }
-        }
-        item {
-            Choices(
-                title = "Duração máxima",
-                options = listOf(10, 15, 20, 30, 60, 0),
-                selected = settings.maxDurationMinutes,
-                label = { if (it == 0) "Sem limite" else "$it min" },
-            ) { value -> vm.updateSettings { it.copy(maxDurationMinutes = value) } }
-        }
-
-        item { SectionHeader("Sincronização", index = 4) }
-        item {
-            SwitchRow(
-                "Buscar curtidas automaticamente",
-                if (settings.lastSyncAt > 0) "Última busca ${formatAgo(settings.lastSyncAt)}." else "Em segundo plano, com bateria boa.",
-                settings.autoSync,
-            ) { value -> vm.updateSettings { it.copy(autoSync = value) } }
-        }
-        if (settings.autoSync) {
-            item {
-                Choices(
-                    title = "Frequência",
-                    options = listOf(3, 6, 12, 24),
-                    selected = settings.syncIntervalHours,
-                    label = { "a cada $it h" },
-                ) { value -> vm.updateSettings { it.copy(syncIntervalHours = value) } }
-            }
-        }
-        item {
-            SwitchRow(
-                "Apagar o que eu descurtir",
-                "Quando você tira o gostei no YouTube, a música sai do aparelho.",
-                settings.removeUnliked,
-            ) { value -> vm.updateSettings { it.copy(removeUnliked = value) } }
-        }
-
-        item { SectionHeader("Motor de download", index = 5) }
-        item {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("yt-dlp", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        engineVersion?.let { "versão $it" } ?: "versão embutida (atualiza no primeiro download)",
-                        style = DataStyle,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (engineUpdating) {
-                    CircularProgressIndicator(Modifier.size(20.dp).padding(end = 4.dp), strokeWidth = 2.dp, color = Meridiano.Mineral)
-                } else {
-                    SecondaryButton("Atualizar", vm::updateEngine)
-                }
-            }
-        }
-        item { Note("O YouTube muda com frequência; o Sonar atualiza o yt-dlp sozinho uma vez por dia.") }
-
-        item { SectionHeader("Armazenamento", index = 6) }
-        item {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                Text("${songCount(tracks.size)} no aparelho", style = MaterialTheme.typography.titleSmall)
-                Text(formatBytes(bytes), style = DataStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(Passo.p3))
+                Text("O YouTube muda com frequência; o motor acompanha.", style = Tipo.nota, color = cores.tintaSuave)
             }
         }
 
-        item { SectionHeader("Sobre", index = 7) }
         item {
-            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
-                Text("Sonar", style = MaterialTheme.typography.titleLarge)
-                Text("versão ${BuildConfig.VERSION_NAME}", style = DataStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Identidade MERIDIANO: racionalismo monumental, humanismo tecnológico, engenharia de precisão. " +
-                        "A forma serve à finalidade.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "App pessoal. Baixe só para uso próprio e respeite os direitos dos artistas e os termos do YouTube. " +
-                        "Tipografia IBM Plex (SIL Open Font License).",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Parametros(nome = "Armazenamento", id = "P-07") {
+                Leitura(
+                    rotulo = "Acervo",
+                    valor = tracks.size.toString(),
+                    unidade = if (tracks.size == 1) "música" else "músicas",
+                    referencia = "${formatBytes(bytes)} no aparelho",
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
-        item { Motto() }
-    }
-}
 
-@Composable
-private fun Note(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-    )
-}
-
-@Composable
-private fun SwitchRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    enabled: Boolean = true,
-    onChange: (Boolean) -> Unit,
-) {
-    Row(
-        Modifier.fillMaxWidth()
-            .clickable(enabled = enabled) { onChange(!checked) }
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f).padding(end = 16.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(
-            checked = checked,
-            onCheckedChange = onChange,
-            enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedTrackColor = Meridiano.Bronze,
-                checkedThumbColor = Meridiano.Graphite,
-                uncheckedTrackColor = Meridiano.GraphiteHigh,
-                uncheckedBorderColor = Meridiano.Line,
-                uncheckedThumbColor = Meridiano.IvoryMuted,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun <T> Choices(
-    title: String,
-    options: List<T>,
-    selected: T,
-    label: (T) -> String,
-    onSelect: (T) -> Unit,
-) {
-    Column(Modifier.padding(vertical = 8.dp)) {
-        Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(horizontal = 20.dp))
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            options.forEach { option ->
-                SelectChip(label(option), selected = option == selected, onClick = { onSelect(option) })
+        item {
+            Placa(
+                titulo = "Sonar · Meridiano",
+                revisao = BuildConfig.VERSION_CODE,
+                campos = listOf(
+                    "Modelo" to "SONAR ${BuildConfig.VERSION_NAME}",
+                    "Série" to String.format(Locale.ROOT, "MRD-%04d", BuildConfig.VERSION_CODE),
+                    "Operador" to "USO PESSOAL",
+                    "Fabricação" to BuildConfig.BUILD_DATE,
+                ),
+                finalidade = "Guardar no aparelho, em áudio, as músicas curtidas no YouTube, e tocá-las sem anúncios.",
+                modifier = Modifier.padding(horizontal = Passo.p5),
+            ) {
+                if (verified) {
+                    SeloCompacto(BuildConfig.VERSION_NAME, "$done/$done", formatData(settings.lastSyncAt.takeIf { it > 0 } ?: System.currentTimeMillis()))
+                }
             }
         }
+
+        item {
+            Text(
+                "App pessoal. Baixe só para uso próprio e respeite os artistas e os termos do YouTube. " +
+                    "Tipografia: Marcellus SC, Spectral e B612 (SIL Open Font License); osifont (LGPL 3 com exceção de fonte).",
+                style = Tipo.nota,
+                color = cores.tintaSuave,
+                modifier = Modifier.padding(horizontal = Passo.p5),
+            )
+        }
+        item { Colofao() }
     }
+}
+
+/** A settings panel, padded off the screen edges. */
+@Composable
+private fun Parametros(nome: String, id: String, content: @Composable ColumnScope.() -> Unit) {
+    Painel(Modifier.padding(horizontal = Passo.p5), nome = nome, id = id, content = content)
 }

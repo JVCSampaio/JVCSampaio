@@ -1,7 +1,6 @@
 package io.github.jvcsampaio.sonar.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,18 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.RemoveCircleOutline
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,10 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,18 +27,23 @@ import io.github.jvcsampaio.sonar.data.db.artwork
 import io.github.jvcsampaio.sonar.ui.AppActions
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
 import io.github.jvcsampaio.sonar.ui.components.Artwork
+import io.github.jvcsampaio.sonar.ui.components.Botao
+import io.github.jvcsampaio.sonar.ui.components.BotaoGlifo
+import io.github.jvcsampaio.sonar.ui.components.Dialogo
+import io.github.jvcsampaio.sonar.ui.components.Fio
+import io.github.jvcsampaio.sonar.ui.components.Glifo
 import io.github.jvcsampaio.sonar.ui.components.MenuAction
+import io.github.jvcsampaio.sonar.ui.components.MenuMais
+import io.github.jvcsampaio.sonar.ui.components.Rotulo
 import io.github.jvcsampaio.sonar.ui.components.TextInputDialog
-import io.github.jvcsampaio.sonar.ui.components.OverflowMenu
-import io.github.jvcsampaio.sonar.ui.components.PlayShuffleRow
+import io.github.jvcsampaio.sonar.ui.components.TipoBotao
 import io.github.jvcsampaio.sonar.ui.components.TrackRow
-import io.github.jvcsampaio.sonar.ui.components.rememberArtworkColor
 import io.github.jvcsampaio.sonar.ui.formatTotalDuration
 import io.github.jvcsampaio.sonar.ui.songActions
-import io.github.jvcsampaio.sonar.ui.songCount
-import io.github.jvcsampaio.sonar.ui.components.MonoLabel
-import io.github.jvcsampaio.sonar.ui.components.cornerMarks
-import io.github.jvcsampaio.sonar.ui.theme.Meridiano
+import io.github.jvcsampaio.sonar.ui.theme.Chanfro
+import io.github.jvcsampaio.sonar.ui.theme.M
+import io.github.jvcsampaio.sonar.ui.theme.Passo
+import io.github.jvcsampaio.sonar.ui.theme.Tipo
 
 @Composable
 fun ArtistScreen(name: String, vm: SonarViewModel, actions: AppActions) {
@@ -64,10 +53,9 @@ fun ArtistScreen(name: String, vm: SonarViewModel, actions: AppActions) {
         title = name,
         tracks = tracks,
         cover = tracks.firstOrNull()?.artwork,
-        coverShape = CircleShape,
         vm = vm,
         actions = actions,
-        kicker = "Artista",
+        kind = "Artista",
         rowActions = { songActions(it, vm, actions, showArtist = false) },
     )
 }
@@ -84,21 +72,17 @@ fun PlaylistScreen(id: Long, vm: SonarViewModel, actions: AppActions) {
         title = name,
         tracks = tracks,
         cover = tracks.firstOrNull()?.artwork,
-        coverShape = MaterialTheme.shapes.small,
         vm = vm,
         actions = actions,
-        kicker = "Playlist",
+        kind = "Playlist",
         headerActions = listOf(
-            MenuAction("Renomear", Icons.Rounded.Edit) { renaming = true },
-            MenuAction("Apagar playlist", Icons.Rounded.Delete) { deleting = true },
+            MenuAction("Renomear") { renaming = true },
+            MenuAction("Apagar playlist") { deleting = true },
         ),
         rowActions = { track ->
-            songActions(
-                track, vm, actions,
-                extra = listOf(MenuAction("Tirar da playlist", Icons.Rounded.RemoveCircleOutline) { vm.removeFromPlaylist(id, track) }),
-            )
+            songActions(track, vm, actions, extra = listOf(MenuAction("Tirar da playlist") { vm.removeFromPlaylist(id, track) }))
         },
-        emptyText = "Adicione músicas pelo menu ⋮ de qualquer faixa.",
+        emptyText = "Adicione músicas pelo menu de qualquer faixa.",
     )
 
     if (renaming) {
@@ -114,91 +98,80 @@ fun PlaylistScreen(id: Long, vm: SonarViewModel, actions: AppActions) {
         )
     }
     if (deleting) {
-        AlertDialog(
-            onDismissRequest = { deleting = false },
-            title = { Text("Apagar \"$name\"?") },
-            text = { Text("As músicas continuam na biblioteca.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    deleting = false
-                    vm.deletePlaylist(id)
-                    actions.back()
-                }) { Text("Apagar") }
+        Dialogo(
+            titulo = "Apagar playlist",
+            onDismiss = { deleting = false },
+            confirmar = "Apagar",
+            onConfirm = {
+                deleting = false
+                vm.deletePlaylist(id)
+                actions.back()
             },
-            dismissButton = { TextButton(onClick = { deleting = false }) { Text("Cancelar") } },
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        )
+        ) {
+            Text("\"$name\" deixa de existir. As músicas continuam na biblioteca.", style = Tipo.corpo, color = M.cores.tinta)
+        }
     }
 }
 
+/** Artist or playlist: the cover on the axis, the name in Capitalis, readings, then the songs. */
 @Composable
 private fun CollectionScreen(
     title: String,
     tracks: List<TrackEntity>,
     cover: Any?,
-    coverShape: Shape,
     vm: SonarViewModel,
     actions: AppActions,
     rowActions: (TrackEntity) -> List<MenuAction>,
-    kicker: String,
+    kind: String,
     headerActions: List<MenuAction> = emptyList(),
-    emptyText: String = "Nenhuma música baixada.",
+    emptyText: String = "Nenhuma música no aparelho.",
 ) {
     val player by vm.player.state.collectAsStateWithLifecycle()
-    val tint = rememberArtworkColor(cover)
     val totalMs = remember(tracks) { tracks.sumOf { it.durationMs } }
+    val cores = M.cores
 
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+    LazyColumn(contentPadding = PaddingValues(bottom = Passo.p6)) {
         item {
-            Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(tint, Meridiano.Graphite)))) {
-                Column(Modifier.fillMaxWidth().padding(bottom = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = actions.back) {
-                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar")
-                        }
-                        Spacer(Modifier.weight(1f))
-                        if (headerActions.isNotEmpty()) OverflowMenu(headerActions)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Artwork(cover, Modifier.size(196.dp).cornerMarks(), shape = coverShape, iconSize = 56.dp)
-                    Spacer(Modifier.height(26.dp))
-                    MonoLabel(kicker, color = Meridiano.Bronze, style = MaterialTheme.typography.labelSmall)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 24.dp),
-                    )
-                    Spacer(Modifier.height(4.dp))
-                    MonoLabel(if (tracks.isEmpty()) songCount(0) else "${songCount(tracks.size)} · ${formatTotalDuration(totalMs)}")
+            Row(Modifier.fillMaxWidth().padding(horizontal = Passo.p1, vertical = Passo.p1), verticalAlignment = Alignment.CenterVertically) {
+                BotaoGlifo(Glifo.Voltar, "Voltar", actions.back)
+                Spacer(Modifier.weight(1f))
+                if (headerActions.isNotEmpty()) MenuMais(headerActions)
+            }
+        }
+        item {
+            Column(Modifier.fillMaxWidth().padding(horizontal = Passo.p5), horizontalAlignment = Alignment.CenterHorizontally) {
+                Artwork(cover, Modifier.size(208.dp), corte = Chanfro.g)
+                Spacer(Modifier.height(Passo.p6))
+                Rotulo(kind, style = Tipo.cota)
+                Spacer(Modifier.height(Passo.p1))
+                Text(title, style = Tipo.titulus2, color = cores.tinta, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(Passo.p2))
+                Row(horizontalArrangement = Arrangement.spacedBy(Passo.p4), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${tracks.size} ${if (tracks.size == 1) "música" else "músicas"}", style = Tipo.dado, color = cores.tintaSuave)
+                    if (totalMs > 0) Text(formatTotalDuration(totalMs), style = Tipo.dado, color = cores.tintaSuave)
                 }
             }
         }
         item {
-            PlayShuffleRow(
-                onPlay = { vm.play(tracks) },
-                onShuffle = { vm.shuffle(tracks) },
-                enabled = tracks.isNotEmpty(),
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
+            Row(
+                Modifier.padding(start = Passo.p5, end = Passo.p5, top = Passo.p6, bottom = Passo.p4),
+                horizontalArrangement = Arrangement.spacedBy(Passo.p3),
+            ) {
+                Botao("Tocar", { vm.play(tracks) }, Modifier.weight(1f), tipo = TipoBotao.Principal, enabled = tracks.isNotEmpty())
+                Botao("Aleatório", { vm.shuffle(tracks) }, Modifier.weight(1f), enabled = tracks.isNotEmpty())
+            }
+            Fio(Modifier.fillMaxWidth())
         }
         if (tracks.isEmpty()) {
             item {
-                Text(
-                    emptyText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(20.dp),
-                )
+                Text(emptyText, style = Tipo.corpo, color = cores.tintaSuave, modifier = Modifier.padding(Passo.p5))
             }
         }
         itemsIndexed(tracks, key = { _, track -> track.videoId }) { index, track ->
             TrackRow(
                 track = track,
                 isCurrent = track.videoId == player.current?.mediaId,
+                playing = player.isPlaying,
                 onClick = { vm.play(tracks, index) },
                 actions = rowActions(track),
             )

@@ -30,7 +30,7 @@ object Notifications {
                 NotificationChannel(CHANNEL_DOWNLOADS, "Downloads", NotificationManager.IMPORTANCE_LOW)
                     .apply { description = "Progresso dos downloads das suas curtidas" },
                 NotificationChannel(CHANNEL_SYNC, "Sincronização", NotificationManager.IMPORTANCE_DEFAULT)
-                    .apply { description = "Avisos quando a sincronização precisa de você" },
+                    .apply { description = "Avisos quando a sincronização para e precisa de uma ação" },
             ),
         )
     }
@@ -41,7 +41,7 @@ object Notifications {
             .setSmallIcon(R.drawable.ic_stat_sonar)
             .setColor(BRONZE)
             .setContentTitle(title)
-            .setContentText(text ?: "Baixando suas curtidas")
+            .setContentText(text ?: "Extraindo o áudio das curtidas")
             .setContentIntent(openApp(context))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -58,7 +58,7 @@ object Notifications {
         val notification = NotificationCompat.Builder(context, CHANNEL_SYNC)
             .setSmallIcon(R.drawable.ic_stat_sonar)
             .setColor(BRONZE)
-            .setContentTitle("Sonar precisa de você")
+            .setContentTitle("Sincronização interrompida")
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setContentIntent(openApp(context))

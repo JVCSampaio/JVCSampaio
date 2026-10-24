@@ -2,18 +2,18 @@ package io.github.jvcsampaio.sonar.ui
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,25 +21,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Home
-import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.Sync
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,8 +35,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,9 +52,18 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import io.github.jvcsampaio.sonar.data.db.TrackEntity
+import io.github.jvcsampaio.sonar.data.db.TrackStatus
 import io.github.jvcsampaio.sonar.playback.PlayerState
 import io.github.jvcsampaio.sonar.ui.components.AddToPlaylistSheet
 import io.github.jvcsampaio.sonar.ui.components.Artwork
+import io.github.jvcsampaio.sonar.ui.components.BotaoGlifo
+import io.github.jvcsampaio.sonar.ui.components.Estado
+import io.github.jvcsampaio.sonar.ui.components.Fio
+import io.github.jvcsampaio.sonar.ui.components.Glifo
+import io.github.jvcsampaio.sonar.ui.components.Lampada
+import io.github.jvcsampaio.sonar.ui.components.ReguaFina
+import io.github.jvcsampaio.sonar.ui.components.Rotulo
+import io.github.jvcsampaio.sonar.ui.components.peca
 import io.github.jvcsampaio.sonar.ui.screens.ArtistScreen
 import io.github.jvcsampaio.sonar.ui.screens.HomeScreen
 import io.github.jvcsampaio.sonar.ui.screens.LibraryScreen
@@ -75,15 +71,20 @@ import io.github.jvcsampaio.sonar.ui.screens.PlayerScreen
 import io.github.jvcsampaio.sonar.ui.screens.PlaylistScreen
 import io.github.jvcsampaio.sonar.ui.screens.SettingsScreen
 import io.github.jvcsampaio.sonar.ui.screens.SyncScreen
-import io.github.jvcsampaio.sonar.ui.components.Hairline
-import io.github.jvcsampaio.sonar.ui.components.ProgressLine
-import io.github.jvcsampaio.sonar.ui.theme.Meridiano
+import io.github.jvcsampaio.sonar.ui.screens.estadoArs
+import io.github.jvcsampaio.sonar.ui.theme.Chanfro
+import io.github.jvcsampaio.sonar.ui.theme.M
+import io.github.jvcsampaio.sonar.ui.theme.Movimento
+import io.github.jvcsampaio.sonar.ui.theme.Passo
+import io.github.jvcsampaio.sonar.ui.theme.Tipo
+import io.github.jvcsampaio.sonar.ui.theme.Traco
 import kotlinx.coroutines.delay
 
-private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
-    Home("home", "Início", Icons.Rounded.Home),
-    Library("library", "Biblioteca", Icons.Rounded.LibraryMusic),
-    Sync("sync", "Sincronizar", Icons.Rounded.Sync),
+/** The three rooms of the building: the entrance, the library and the workshop. */
+private enum class Tab(val route: String, val label: String) {
+    Home("home", "Início"),
+    Library("library", "Biblioteca"),
+    Sync("sync", "Oficina"),
 }
 
 @Composable
@@ -98,12 +99,18 @@ fun SonarRoot(
     val player by vm.player.state.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     val playlists by vm.playlists.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val counts by vm.counts.collectAsStateWithLifecycle()
+    val progress by vm.downloadProgress.collectAsStateWithLifecycle()
+    val waiting by vm.downloadsWaiting.collectAsStateWithLifecycle()
+    val syncing by vm.syncRunning.collectAsStateWithLifecycle()
     var expanded by rememberSaveable { mutableStateOf(false) }
     var playlistTarget by remember { mutableStateOf<TrackEntity?>(null) }
     val snackbar = remember { SnackbarHostState() }
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val onTab = Tab.entries.any { it.route == route }
+    val cores = M.cores
 
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(openPlayer) {
@@ -133,26 +140,38 @@ fun SonarRoot(
         )
     }
 
-    Box(Modifier.fillMaxSize().background(Meridiano.Graphite)) {
+    // The workshop tab carries a lamp while something operates there.
+    val queued = (counts[TrackStatus.QUEUED] ?: 0) + (counts[TrackStatus.DOWNLOADING] ?: 0)
+    val oficina = when {
+        settings.connected && settings.lastSyncError != null -> Estado.Critico
+        else -> estadoArs(progress, waiting, queued, syncing, settings)?.first
+    }
+
+    Box(Modifier.fillMaxSize().background(cores.fundo)) {
         Scaffold(
-            containerColor = Meridiano.Graphite,
+            containerColor = cores.fundo,
+            contentColor = cores.tinta,
             snackbarHost = {
                 SnackbarHost(snackbar) { data ->
-                    Snackbar(
-                        snackbarData = data,
-                        shape = MaterialTheme.shapes.small,
-                        containerColor = Meridiano.GraphiteHighest,
-                        contentColor = Meridiano.Ivory,
+                    Text(
+                        data.visuals.message,
+                        style = Tipo.nota,
+                        color = cores.tinta,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Passo.p5, vertical = Passo.p3)
+                            .peca(cores.relevo, cores.linhaForte, Chanfro.p, Traco.fio)
+                            .padding(horizontal = Passo.p5, vertical = Passo.p4),
                     )
                 }
             },
             bottomBar = {
-                Column(Modifier.background(Meridiano.Graphite)) {
+                Column(Modifier.background(cores.fundo)) {
                     if (player.current != null) {
                         MiniPlayer(player, vm, onOpen = { expanded = true })
                     }
                     if (onTab) {
-                        BottomBar(route) { nav.navigateToTab(it) }
+                        BottomBar(route, oficina) { nav.navigateToTab(it) }
                     } else {
                         Spacer(Modifier.navigationBarsPadding())
                     }
@@ -163,8 +182,8 @@ fun SonarRoot(
                 navController = nav,
                 startDestination = Tab.Home.route,
                 modifier = Modifier.padding(padding),
-                enterTransition = { fadeIn(tween(180)) },
-                exitTransition = { fadeOut(tween(180)) },
+                enterTransition = { fadeIn(Movimento.mecanico(Movimento.D2)) },
+                exitTransition = { fadeOut(Movimento.mecanico(Movimento.D2)) },
             ) {
                 composable(Tab.Home.route) { HomeScreen(vm, actions) }
                 composable(Tab.Library.route) { LibraryScreen(vm, actions) }
@@ -181,8 +200,8 @@ fun SonarRoot(
 
         AnimatedVisibility(
             visible = expanded && player.current != null,
-            enter = slideInVertically(tween(320)) { it } + fadeIn(tween(200)),
-            exit = slideOutVertically(tween(260)) { it } + fadeOut(tween(200)),
+            enter = slideInVertically(Movimento.mecanico(Movimento.D4)) { it } + fadeIn(Movimento.mecanico(Movimento.D3)),
+            exit = slideOutVertically(Movimento.mecanico(Movimento.D3)) { it } + fadeOut(Movimento.mecanico(Movimento.D2)),
         ) {
             PlayerScreen(
                 vm = vm,
@@ -217,26 +236,40 @@ private fun NavHostController.navigateToTab(tab: Tab) {
     }
 }
 
+/**
+ * The bottom bar reads like a scale: a hairline horizon with the three rooms on it, and the
+ * bronze transit stroke standing on the one you are in.
+ */
 @Composable
-private fun BottomBar(route: String?, onSelect: (Tab) -> Unit) {
-    Column {
-        Hairline(Modifier.fillMaxWidth())
-        NavigationBar(containerColor = Meridiano.Graphite, tonalElevation = 0.dp) {
+private fun BottomBar(route: String?, oficina: Estado?, onSelect: (Tab) -> Unit) {
+    val cores = M.cores
+    Column(Modifier.navigationBarsPadding()) {
+        Fio(Modifier.fillMaxWidth(), cores.linhaForte)
+        Row(Modifier.fillMaxWidth().height(56.dp)) {
             Tab.entries.forEach { tab ->
                 val selected = route == tab.route
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = { onSelect(tab) },
-                    icon = { Icon(tab.icon, contentDescription = null) },
-                    label = { Text(tab.label.uppercase(), style = MaterialTheme.typography.labelSmall) },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = Meridiano.Bronze,
-                        selectedTextColor = Meridiano.Bronze,
-                        indicatorColor = Color.Transparent,
-                        unselectedIconColor = Meridiano.IvoryMuted,
-                        unselectedTextColor = Meridiano.IvoryMuted,
-                    ),
-                )
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxSize()
+                        .semantics { this.selected = selected }
+                        .clickable(role = Role.Tab) { onSelect(tab) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (selected) {
+                        Canvas(Modifier.align(Alignment.TopCenter).size(Traco.eixo, Passo.p5)) {
+                            drawRect(cores.insignia, Offset.Zero, Size(size.width, size.height))
+                        }
+                    }
+                    Row(
+                        Modifier.padding(top = Passo.p3),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Passo.p2),
+                    ) {
+                        if (tab == Tab.Sync && oficina != null) Lampada(oficina, tamanho = 9.dp)
+                        Rotulo(tab.label, color = if (selected) cores.tinta else cores.tintaSuave)
+                    }
+                }
             }
         }
     }
@@ -245,6 +278,7 @@ private fun BottomBar(route: String?, onSelect: (Tab) -> Unit) {
 @Composable
 private fun MiniPlayer(state: PlayerState, vm: SonarViewModel, onOpen: () -> Unit) {
     val current = state.current ?: return
+    val cores = M.cores
     var position by remember { mutableLongStateOf(vm.player.positionMs) }
     LaunchedEffect(current.mediaId, state.isPlaying) {
         while (true) {
@@ -254,39 +288,28 @@ private fun MiniPlayer(state: PlayerState, vm: SonarViewModel, onOpen: () -> Uni
     }
     val fraction = if (state.durationMs > 0) (position.toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
 
-    Surface(
-        onClick = onOpen,
-        color = Meridiano.GraphiteRaised,
-        contentColor = Meridiano.Ivory,
-        shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, Meridiano.Line),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Passo.p3, vertical = Passo.p2)
+            .peca(cores.superficie, cores.linhaForte, Chanfro.p, Traco.fio)
+            .clickable(onClick = onOpen)
+            .padding(Traco.fio),
     ) {
-        Column {
-            ProgressLine(fraction)
-            Row(Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(current.artwork, Modifier.size(42.dp), shape = MaterialTheme.shapes.extraSmall)
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(current.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(
-                        current.artist,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Meridiano.IvoryMuted,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                IconButton(onClick = { vm.player.togglePlay() }) {
-                    Icon(
-                        if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                        contentDescription = if (state.isPlaying) "Pausar" else "Tocar",
-                    )
-                }
-                IconButton(onClick = { vm.player.next() }, enabled = state.hasNext) {
-                    Icon(Icons.Rounded.SkipNext, contentDescription = "Próxima")
-                }
+        Row(Modifier.padding(start = Passo.p3, top = Passo.p3, bottom = Passo.p3), verticalAlignment = Alignment.CenterVertically) {
+            Artwork(current.artwork, Modifier.size(42.dp))
+            Spacer(Modifier.width(Passo.p4))
+            Column(Modifier.weight(1f)) {
+                Text(current.title, style = Tipo.corpoForte, color = cores.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(current.artist, style = Tipo.nota, color = cores.tintaSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
+            BotaoGlifo(
+                if (state.isPlaying) Glifo.Pausar else Glifo.Tocar,
+                if (state.isPlaying) "Pausar" else "Tocar",
+                { vm.player.togglePlay() },
+            )
+            BotaoGlifo(Glifo.Proxima, "Próxima", { vm.player.next() }, enabled = state.hasNext)
         }
+        ReguaFina(fraction, Modifier.padding(horizontal = Passo.p3))
     }
 }

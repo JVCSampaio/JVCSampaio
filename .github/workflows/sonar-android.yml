@@ -111,10 +111,11 @@ jobs:
           git push origin "HEAD:$GITHUB_REF_NAME"
 
   # After the emulator test passes, the APKs go to a fixed release so the phone can download
-  # them from a stable link: releases/download/sonar-latest/Sonar.apk
+  # them from a stable link: releases/download/sonar-latest/Sonar.apk. Publishing waits for
+  # the owner's approval: it runs only for "[release]" in the commit message or a manual run.
   release:
     needs: [build, smoke]
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -132,7 +133,7 @@ jobs:
           mv apk/app-arm64-v8a-release.apk Sonar.apk
           mv apk/app-armeabi-v7a-release.apk Sonar-celular-antigo.apk
           cat > notes.md <<NOTES
-          Versão 1.0.${{ github.run_number }} do Sonar, testada no emulador antes de ser publicada.
+          Versão 1.1.${{ github.run_number }} do Sonar, testada no emulador antes de ser publicada.
 
           **Instalar:** baixe \`Sonar.apk\` no celular, abra e permita instalar apps desta fonte.
           Celulares muito antigos (32 bits) usam \`Sonar-celular-antigo.apk\`.
@@ -144,6 +145,6 @@ jobs:
           gh release delete sonar-latest --yes --cleanup-tag || true
           gh release create sonar-latest Sonar.apk Sonar-celular-antigo.apk \
             --target "${{ github.sha }}" \
-            --title "Sonar para Android (1.0.${{ github.run_number }})" \
+            --title "Sonar para Android (1.1.${{ github.run_number }})" \
             --notes-file notes.md \
             --prerelease

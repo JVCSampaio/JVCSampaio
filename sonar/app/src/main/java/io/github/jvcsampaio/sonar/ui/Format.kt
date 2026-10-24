@@ -41,3 +41,16 @@ fun artistAndDuration(artist: String, durationMs: Long): String =
     listOfNotNull(artist.takeIf { it.isNotBlank() }, durationMs.takeIf { it > 0 }?.let(::formatDuration))
         .joinToString(" · ")
         .ifEmpty { "Detalhes chegam com o download" }
+
+/** ISO 8601 date, as everything in MERIDIANO: "2026-10-24". */
+fun formatData(time: Long): String =
+    java.time.Instant.ofEpochMilli(time).atZone(java.time.ZoneId.systemDefault()).toLocalDate().toString()
+
+/** Log time stamp: the hour for today ("14:02"), the ISO month and day before that ("10-23"). */
+fun formatCarimbo(time: Long, now: Long = System.currentTimeMillis()): String {
+    val zone = java.time.ZoneId.systemDefault()
+    val moment = java.time.Instant.ofEpochMilli(time).atZone(zone)
+    val today = java.time.Instant.ofEpochMilli(now).atZone(zone).toLocalDate()
+    return if (moment.toLocalDate() == today) String.format(Locale.ROOT, "%02d:%02d", moment.hour, moment.minute)
+    else String.format(Locale.ROOT, "%02d-%02d", moment.monthValue, moment.dayOfMonth)
+}

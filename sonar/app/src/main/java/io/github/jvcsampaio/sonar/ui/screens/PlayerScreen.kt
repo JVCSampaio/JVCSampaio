@@ -1,16 +1,9 @@
 package io.github.jvcsampaio.sonar.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +14,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -30,49 +24,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Pause
-import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material.icons.rounded.Repeat
-import androidx.compose.material.icons.rounded.RepeatOne
-import androidx.compose.material.icons.rounded.Shuffle
-import androidx.compose.material.icons.rounded.SkipNext
-import androidx.compose.material.icons.rounded.SkipPrevious
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -81,27 +49,41 @@ import androidx.media3.common.Player
 import io.github.jvcsampaio.sonar.playback.PlayerState
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
 import io.github.jvcsampaio.sonar.ui.components.Artwork
-import io.github.jvcsampaio.sonar.ui.components.MonoLabel
-import io.github.jvcsampaio.sonar.ui.components.StatusDot
-import io.github.jvcsampaio.sonar.ui.components.cornerMarks
-import io.github.jvcsampaio.sonar.ui.components.rememberArtworkColor
+import io.github.jvcsampaio.sonar.ui.components.BotaoGlifo
+import io.github.jvcsampaio.sonar.ui.components.Estado
+import io.github.jvcsampaio.sonar.ui.components.Folha
+import io.github.jvcsampaio.sonar.ui.components.Glifo
+import io.github.jvcsampaio.sonar.ui.components.Indicador
+import io.github.jvcsampaio.sonar.ui.components.Lampada
+import io.github.jvcsampaio.sonar.ui.components.Regua
+import io.github.jvcsampaio.sonar.ui.components.Rotulo
+import io.github.jvcsampaio.sonar.ui.components.peca
+import io.github.jvcsampaio.sonar.ui.formatData
 import io.github.jvcsampaio.sonar.ui.formatDuration
-import io.github.jvcsampaio.sonar.ui.theme.DataStyle
-import io.github.jvcsampaio.sonar.ui.theme.Meridiano
+import io.github.jvcsampaio.sonar.ui.theme.Chanfro
+import io.github.jvcsampaio.sonar.ui.theme.M
+import io.github.jvcsampaio.sonar.ui.theme.Passo
+import io.github.jvcsampaio.sonar.ui.theme.Tipo
+import io.github.jvcsampaio.sonar.ui.theme.Traco
 import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.roundToInt
 
-@OptIn(ExperimentalFoundationApi::class)
+/**
+ * The observatory: the cover on the axis, the name in Capitalis, the régua as the playhead and
+ * the transport below. Shuffle and repeat are switch positions, read as lamp and word.
+ */
 @Composable
 fun PlayerScreen(vm: SonarViewModel, onCollapse: () -> Unit, onAddToPlaylist: (String) -> Unit) {
     val state by vm.player.state.collectAsStateWithLifecycle()
+    val tracks by vm.tracks.collectAsStateWithLifecycle()
     val current = state.current ?: return
-    val tint = rememberArtworkColor(current.artwork)
+    val track = remember(tracks, current.mediaId) { tracks.firstOrNull { it.videoId == current.mediaId } }
     var position by remember { mutableLongStateOf(vm.player.positionMs) }
     var seeking by remember { mutableStateOf<Float?>(null) }
     var showQueue by remember { mutableStateOf(false) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
+    val cores = M.cores
 
     LaunchedEffect(current.mediaId, state.isPlaying) {
         while (true) {
@@ -113,15 +95,15 @@ fun PlayerScreen(vm: SonarViewModel, onCollapse: () -> Unit, onAddToPlaylist: (S
 
     val duration = state.durationMs
     val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
-    val artScale by animateFloatAsState(if (state.isPlaying) 1f else 0.9f, spring(dampingRatio = 0.75f), label = "artScale")
+    val shown = seeking?.let { (it * duration).toLong() } ?: position
 
     // The player sits outside the Scaffold, so it sets its own content color.
-    CompositionLocalProvider(LocalContentColor provides Meridiano.Ivory) {
+    CompositionLocalProvider(LocalContentColor provides cores.tinta) {
         Box(
             Modifier
                 .fillMaxSize()
                 .offset { IntOffset(0, dragOffset.roundToInt()) }
-                .background(Meridiano.Graphite)
+                .background(cores.fundo)
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
                         onDragEnd = {
@@ -132,127 +114,116 @@ fun PlayerScreen(vm: SonarViewModel, onCollapse: () -> Unit, onAddToPlaylist: (S
                     ) { _, dy -> dragOffset = (dragOffset + dy).coerceAtLeast(0f) }
                 },
         ) {
-            Blueprint(tint)
-            Column(
-                Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onCollapse) {
-                        Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = "Minimizar", modifier = Modifier.size(30.dp))
-                    }
+            Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(horizontal = Passo.p5)) {
+                Row(Modifier.fillMaxWidth().padding(top = Passo.p2), verticalAlignment = Alignment.CenterVertically) {
+                    BotaoGlifo(Glifo.Recolher, "Minimizar", onCollapse)
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                        MonoLabel("Em reprodução", color = Meridiano.Bronze, style = MaterialTheme.typography.labelSmall)
+                        Indicador(
+                            when {
+                                state.isBuffering -> Estado.Atencao
+                                state.isPlaying -> Estado.Aceso
+                                else -> Estado.Repouso
+                            },
+                            when {
+                                state.isBuffering -> "Carregando"
+                                state.isPlaying -> "Tocando"
+                                else -> "Pausado"
+                            },
+                        )
                         if (state.queue.size > 1) {
                             Text(
                                 String.format(Locale.ROOT, "%02d / %02d", state.currentIndex + 1, state.queue.size),
-                                style = DataStyle,
-                                color = Meridiano.IvoryMuted,
+                                style = Tipo.dado,
+                                color = cores.tintaSuave,
                             )
                         }
                     }
-                    IconButton(onClick = { showQueue = true }) {
-                        Icon(Icons.AutoMirrored.Rounded.QueueMusic, contentDescription = "Fila")
-                    }
+                    BotaoGlifo(Glifo.Adicionar, "Adicionar à playlist", { onAddToPlaylist(current.mediaId) })
+                    BotaoGlifo(Glifo.Fila, "Fila", { showQueue = true })
                 }
 
                 Spacer(Modifier.weight(1f))
-                Artwork(
-                    current.artwork,
-                    Modifier
-                        .padding(horizontal = 8.dp)
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .graphicsLayer {
-                            scaleX = artScale
-                            scaleY = artScale
-                        }
-                        .cornerMarks(color = Meridiano.Bronze, length = 16.dp, gap = 10.dp),
-                    shape = MaterialTheme.shapes.small,
-                    iconSize = 96.dp,
+                Artwork(current.artwork, Modifier.fillMaxWidth().aspectRatio(1f), corte = Chanfro.g)
+                Spacer(Modifier.weight(1f))
+
+                Text(
+                    current.title,
+                    style = if (current.title.length > 28) Tipo.titulus3 else Tipo.titulus2,
+                    color = cores.tinta,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(Modifier.weight(1f))
-
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            current.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            maxLines = 1,
-                            modifier = Modifier.basicMarquee(),
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            current.artist,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Meridiano.IvoryMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    IconButton(onClick = { onAddToPlaylist(current.mediaId) }) {
-                        Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = "Adicionar à playlist")
-                    }
+                Text(current.artist, style = Tipo.corpo, color = cores.tintaSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (track != null) {
+                    val ficha = listOfNotNull(
+                        track.filePath?.substringAfterLast('.', "")?.takeIf { it.isNotEmpty() }?.uppercase(Locale.ROOT),
+                        track.downloadedAt?.let { "gravada ${formatData(it)}" },
+                        "${track.playCount}×",
+                    )
+                    Text(ficha.joinToString("  ·  "), style = Tipo.dado, color = cores.tempo, modifier = Modifier.padding(top = Passo.p1))
                 }
 
-                Spacer(Modifier.height(14.dp))
-                SeekBar(
-                    fraction = seeking ?: fraction,
+                Spacer(Modifier.height(Passo.p5))
+                Regua(
+                    valor = seeking ?: fraction,
+                    leitura = formatDuration(shown),
+                    descricao = "Posição da música",
                     onSeek = { seeking = it },
                     onSeekFinished = {
                         seeking?.let { vm.player.seekTo((it * duration).toLong()) }
                         seeking = null
                     },
                 )
-                Row(Modifier.fillMaxWidth()) {
-                    val shown = seeking?.let { (it * duration).toLong() } ?: position
-                    Text(formatDuration(shown), style = DataStyle, color = Meridiano.IvoryMuted)
+                Row(Modifier.fillMaxWidth().padding(top = Passo.p1)) {
+                    Text("0:00", style = Tipo.dado, color = cores.tintaSuave)
                     Spacer(Modifier.weight(1f))
-                    Text("−" + formatDuration(duration - shown), style = DataStyle, color = Meridiano.IvoryMuted)
+                    Text(formatDuration(duration), style = Tipo.dado, color = cores.tintaSuave)
                 }
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(Passo.p5))
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                    horizontalArrangement = Arrangement.spacedBy(Passo.p5, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    ModeButton(
-                        active = state.shuffle,
-                        onClick = { vm.player.toggleShuffle() },
-                    ) { Icon(Icons.Rounded.Shuffle, contentDescription = "Aleatório") }
-                    IconButton(onClick = { vm.player.previous() }, modifier = Modifier.size(56.dp)) {
-                        Icon(Icons.Rounded.SkipPrevious, contentDescription = "Anterior", modifier = Modifier.size(34.dp))
-                    }
-                    FilledIconButton(
-                        onClick = { vm.player.togglePlay() },
-                        modifier = Modifier.size(74.dp),
-                        shape = CircleShape,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Meridiano.Bronze,
-                            contentColor = Meridiano.Graphite,
-                        ),
-                    ) {
-                        Icon(
-                            if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (state.isPlaying) "Pausar" else "Tocar",
-                            modifier = Modifier.size(38.dp),
-                        )
-                    }
-                    IconButton(onClick = { vm.player.next() }, enabled = state.hasNext, modifier = Modifier.size(56.dp)) {
-                        Icon(Icons.Rounded.SkipNext, contentDescription = "Próxima", modifier = Modifier.size(34.dp))
-                    }
-                    ModeButton(
-                        active = state.repeatMode != Player.REPEAT_MODE_OFF,
-                        onClick = { vm.player.cycleRepeat() },
-                    ) {
-                        Icon(
-                            if (state.repeatMode == Player.REPEAT_MODE_ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat,
-                            contentDescription = "Repetir",
-                        )
-                    }
+                    BotaoGlifo(Glifo.Anterior, "Anterior", { vm.player.previous() }, tamanho = Passo.p9, moldura = true)
+                    BotaoGlifo(
+                        if (state.isPlaying) Glifo.Pausar else Glifo.Tocar,
+                        if (state.isPlaying) "Pausar" else "Tocar",
+                        { vm.player.togglePlay() },
+                        Modifier.width(Passo.p10),
+                        tamanho = Passo.p9,
+                        glifoTamanho = 32.dp,
+                        principal = true,
+                    )
+                    BotaoGlifo(
+                        Glifo.Proxima,
+                        "Próxima",
+                        { vm.player.next() },
+                        tamanho = Passo.p9,
+                        moldura = true,
+                        enabled = state.hasNext,
+                    )
                 }
-                Spacer(Modifier.height(30.dp))
+
+                Spacer(Modifier.height(Passo.p5))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Passo.p3)) {
+                    Modo("Aleatório", if (state.shuffle) 2 else 0, Modifier.weight(1f)) { vm.player.toggleShuffle() }
+                    Modo(
+                        when (state.repeatMode) {
+                            Player.REPEAT_MODE_ONE -> "Repetir uma"
+                            Player.REPEAT_MODE_ALL -> "Repetir tudo"
+                            else -> "Repetir"
+                        },
+                        when (state.repeatMode) {
+                            Player.REPEAT_MODE_ONE -> 1
+                            Player.REPEAT_MODE_ALL -> 2
+                            else -> 0
+                        },
+                        Modifier.weight(1f),
+                    ) { vm.player.cycleRepeat() }
+                }
+                Spacer(Modifier.height(Passo.p6))
             }
         }
     }
@@ -260,100 +231,41 @@ fun PlayerScreen(vm: SonarViewModel, onCollapse: () -> Unit, onAddToPlaylist: (S
     if (showQueue) QueueSheet(state, vm, onDismiss = { showQueue = false })
 }
 
-/**
- * A drafting-table background: graphite, a faint grid, the meridian axis through the centre
- * and a trace of the artwork's colour at the top.
- */
+/** A mode switch: empty lamp off, half lamp for one, full lamp for all. */
 @Composable
-private fun Blueprint(tint: Color) {
-    Canvas(Modifier.fillMaxSize()) {
-        drawRect(Brush.verticalGradient(0f to tint.copy(alpha = 0.55f), 0.6f to Color.Transparent))
-        val step = 28.dp.toPx()
-        val grid = Meridiano.Ivory.copy(alpha = 0.035f)
-        var x = (size.width / 2) % step
-        while (x < size.width) {
-            drawLine(grid, Offset(x, 0f), Offset(x, size.height), 1f)
-            x += step
-        }
-        var y = 0f
-        while (y < size.height) {
-            drawLine(grid, Offset(0f, y), Offset(size.width, y), 1f)
-            y += step
-        }
-        drawLine(Meridiano.Bronze.copy(alpha = 0.16f), Offset(size.width / 2, 0f), Offset(size.width / 2, size.height), 1.dp.toPx())
-    }
-}
-
-/** Shuffle and repeat: mineral with a mark underneath when the mode is on. */
-@Composable
-private fun ModeButton(active: Boolean, onClick: () -> Unit, icon: @Composable () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        CompositionLocalProvider(LocalContentColor provides if (active) Meridiano.Mineral else Meridiano.IvoryMuted) {
-            IconButton(onClick = onClick) { icon() }
-        }
-        Box(Modifier.size(4.dp).background(if (active) Meridiano.Mineral else Color.Transparent, CircleShape))
-    }
-}
-
-/** A thin progress line with a diamond for the playhead: tap or drag to seek. */
-@Composable
-private fun SeekBar(fraction: Float, onSeek: (Float) -> Unit, onSeekFinished: () -> Unit) {
-    var width by remember { mutableIntStateOf(1) }
-    var dragging by remember { mutableStateOf(false) }
-    val seek by rememberUpdatedState(onSeek)
-    val finish by rememberUpdatedState(onSeekFinished)
-    val thumb by animateDpAsState(if (dragging) 14.dp else 10.dp, label = "thumb")
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(32.dp)
-            .onSizeChanged { width = it.width.coerceAtLeast(1) }
-            .pointerInput(Unit) {
-                detectTapGestures { offset ->
-                    seek((offset.x / width).coerceIn(0f, 1f))
-                    finish()
-                }
-            }
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragStart = { dragging = true },
-                    onDragEnd = {
-                        dragging = false
-                        finish()
-                    },
-                    onDragCancel = {
-                        dragging = false
-                        finish()
-                    },
-                ) { change, _ -> seek((change.position.x / width).coerceIn(0f, 1f)) }
-            },
-        contentAlignment = Alignment.CenterStart,
+private fun Modo(texto: String, nivel: Int, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val cores = M.cores
+    val ligado = nivel > 0
+    Row(
+        modifier
+            .heightIn(min = Passo.p8)
+            .peca(if (ligado) cores.relevo else cores.fundo, if (ligado) cores.tinta else cores.linhaForte, Chanfro.p, if (ligado) Traco.medio else Traco.fio)
+            .clickable(role = Role.Switch, onClick = onClick)
+            .padding(horizontal = Passo.p5),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Passo.p3, Alignment.CenterHorizontally),
     ) {
-        Box(Modifier.fillMaxWidth().height(2.dp).background(Meridiano.Ivory.copy(alpha = 0.18f)))
-        Box(Modifier.fillMaxWidth(fraction).height(2.dp).background(Meridiano.Mineral))
-        Box(
-            Modifier
-                .offset { IntOffset((fraction * width).roundToInt() - thumb.roundToPx() / 2, 0) }
-                .size(thumb)
-                .rotate(45f)
-                .background(Meridiano.Ivory),
-        )
+        Canvas(Modifier.size(Passo.p4)) {
+            val w = Traco.medio.toPx()
+            val r = size.minDimension / 2
+            drawCircle(if (ligado) cores.tinta else cores.linhaForte, r - w / 2, style = Stroke(w))
+            when (nivel) {
+                2 -> drawCircle(cores.tinta, r)
+                1 -> drawArc(cores.tinta, 90f, 180f, true)
+            }
+        }
+        Rotulo(texto, color = if (ligado) cores.tinta else cores.tintaSuave)
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QueueSheet(state: PlayerState, vm: SonarViewModel, onDismiss: () -> Unit) {
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = state.currentIndex.coerceAtLeast(0))
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Meridiano.GraphiteRaised,
-        contentColor = Meridiano.Ivory,
-    ) {
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Fila", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            MonoLabel("${state.queue.size} faixas")
+    val cores = M.cores
+    Folha(onDismiss) {
+        Row(Modifier.padding(horizontal = Passo.p5, vertical = Passo.p3), verticalAlignment = Alignment.CenterVertically) {
+            Text("Fila", style = Tipo.titulus3, color = cores.tinta, modifier = Modifier.weight(1f))
+            Text("${state.queue.size}", style = Tipo.dado, color = cores.tintaSuave)
         }
         LazyColumn(state = listState, modifier = Modifier.navigationBarsPadding()) {
             itemsIndexed(state.queue) { index, entry ->
@@ -361,34 +273,27 @@ private fun QueueSheet(state: PlayerState, vm: SonarViewModel, onDismiss: () -> 
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .background(if (isCurrent) cores.relevo else Color.Transparent)
                         .clickable { vm.player.skipTo(index) }
-                        .padding(start = 20.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                        .padding(start = Passo.p5, end = Passo.p1, top = Passo.p2, bottom = Passo.p2),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         String.format(Locale.ROOT, "%02d", index + 1),
-                        style = DataStyle,
-                        color = if (isCurrent) Meridiano.Mineral else Meridiano.IvoryMuted,
-                        modifier = Modifier.width(28.dp),
+                        style = Tipo.dado,
+                        color = if (isCurrent) cores.tinta else cores.tintaSuave,
+                        modifier = Modifier.width(Passo.p7),
                     )
                     Artwork(entry.artwork, Modifier.size(42.dp))
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(Passo.p4))
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            entry.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (isCurrent) Meridiano.Mineral else Meridiano.Ivory,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(entry.artist, style = MaterialTheme.typography.bodySmall, color = Meridiano.IvoryMuted, maxLines = 1)
+                        Text(entry.title, style = Tipo.corpoForte, color = cores.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(entry.artist, style = Tipo.nota, color = cores.tintaSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                     if (isCurrent) {
-                        StatusDot(Meridiano.Mineral, Modifier.padding(horizontal = 18.dp), pulse = state.isPlaying)
+                        Lampada(if (state.isPlaying) Estado.Aceso else Estado.Repouso, Modifier.padding(horizontal = Passo.p5))
                     } else {
-                        IconButton(onClick = { vm.player.removeAt(index) }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Tirar da fila", tint = Meridiano.IvoryMuted)
-                        }
+                        BotaoGlifo(Glifo.Fechar, "Tirar da fila", { vm.player.removeAt(index) }, glifoTamanho = 18.dp, color = cores.tintaSuave)
                     }
                 }
             }

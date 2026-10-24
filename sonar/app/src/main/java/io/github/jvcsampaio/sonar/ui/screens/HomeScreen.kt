@@ -1,6 +1,5 @@
 package io.github.jvcsampaio.sonar.ui.screens
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,13 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,27 +24,41 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.jvcsampaio.sonar.data.Settings
 import io.github.jvcsampaio.sonar.data.db.TrackEntity
 import io.github.jvcsampaio.sonar.data.db.TrackStatus
 import io.github.jvcsampaio.sonar.data.db.artwork
+import io.github.jvcsampaio.sonar.sync.DownloadProgress
 import io.github.jvcsampaio.sonar.ui.AppActions
 import io.github.jvcsampaio.sonar.ui.SonarViewModel
 import io.github.jvcsampaio.sonar.ui.components.Artwork
-import io.github.jvcsampaio.sonar.ui.components.Emblem
-import io.github.jvcsampaio.sonar.ui.components.EmptyState
-import io.github.jvcsampaio.sonar.ui.components.MonoLabel
-import io.github.jvcsampaio.sonar.ui.components.Motto
-import io.github.jvcsampaio.sonar.ui.components.PlayShuffleRow
-import io.github.jvcsampaio.sonar.ui.components.ProgressLine
-import io.github.jvcsampaio.sonar.ui.components.SectionHeader
-import io.github.jvcsampaio.sonar.ui.components.StatusDot
-import io.github.jvcsampaio.sonar.ui.formatAgo
+import io.github.jvcsampaio.sonar.ui.components.Assinatura
+import io.github.jvcsampaio.sonar.ui.components.Botao
+import io.github.jvcsampaio.sonar.ui.components.Capa
+import io.github.jvcsampaio.sonar.ui.components.Colofao
+import io.github.jvcsampaio.sonar.ui.components.Estado
+import io.github.jvcsampaio.sonar.ui.components.Indicador
+import io.github.jvcsampaio.sonar.ui.components.Lampada
+import io.github.jvcsampaio.sonar.ui.components.Leitura
+import io.github.jvcsampaio.sonar.ui.components.Painel
+import io.github.jvcsampaio.sonar.ui.components.Regua
+import io.github.jvcsampaio.sonar.ui.components.Rotulo
+import io.github.jvcsampaio.sonar.ui.components.Secao
+import io.github.jvcsampaio.sonar.ui.components.TipoBotao
+import io.github.jvcsampaio.sonar.ui.components.Vazio
+import io.github.jvcsampaio.sonar.ui.components.peca
 import io.github.jvcsampaio.sonar.ui.formatBytes
+import io.github.jvcsampaio.sonar.ui.formatData
 import io.github.jvcsampaio.sonar.ui.groupByArtist
 import io.github.jvcsampaio.sonar.ui.songCount
-import io.github.jvcsampaio.sonar.ui.theme.Meridiano
+import io.github.jvcsampaio.sonar.ui.theme.Chanfro
+import io.github.jvcsampaio.sonar.ui.theme.M
+import io.github.jvcsampaio.sonar.ui.theme.Passo
+import io.github.jvcsampaio.sonar.ui.theme.Tipo
+import io.github.jvcsampaio.sonar.ui.theme.Traco
 import java.time.LocalDate
 import java.time.LocalTime
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 @Composable
@@ -61,6 +67,8 @@ fun HomeScreen(vm: SonarViewModel, actions: AppActions) {
     val playlists by vm.playlists.collectAsStateWithLifecycle()
     val counts by vm.counts.collectAsStateWithLifecycle()
     val progress by vm.downloadProgress.collectAsStateWithLifecycle()
+    val waiting by vm.downloadsWaiting.collectAsStateWithLifecycle()
+    val syncing by vm.syncRunning.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val bytes by vm.storageBytes.collectAsStateWithLifecycle()
     val player by vm.player.state.collectAsStateWithLifecycle()
@@ -76,100 +84,103 @@ fun HomeScreen(vm: SonarViewModel, actions: AppActions) {
             .take(12)
     }
     val queued = (counts[TrackStatus.QUEUED] ?: 0) + (counts[TrackStatus.DOWNLOADING] ?: 0)
+    val currentId = player.current?.mediaId
 
-    LazyColumn(contentPadding = PaddingValues(bottom = 8.dp)) {
+    LazyColumn(contentPadding = PaddingValues(bottom = Passo.p5)) {
         item {
-            Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 18.dp, bottom = 18.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Emblem(Modifier.size(26.dp), pulse = progress != null)
-                    Spacer(Modifier.width(10.dp))
-                    MonoLabel("Meridiano · Sonar", color = Meridiano.Bronze, modifier = Modifier.weight(1f))
-                    IconButton(onClick = actions.openSettings) {
-                        Icon(Icons.Rounded.Settings, contentDescription = "Ajustes", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                Spacer(Modifier.height(18.dp))
-                Text(greeting(), style = MaterialTheme.typography.displaySmall)
-                Spacer(Modifier.height(6.dp))
-                MonoLabel(
-                    if (tracks.isEmpty()) "Acervo vazio"
-                    else listOfNotNull(
-                        songCount(tracks.size),
-                        formatBytes(bytes).takeIf { bytes > 0 },
-                        settings.lastSyncAt.takeIf { it > 0 }?.let { "sincronizado ${formatAgo(it)}" },
-                    ).joinToString(" · "),
-                )
+            Row(
+                Modifier.fillMaxWidth().padding(start = Passo.p5, end = Passo.p2, top = Passo.p6),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Assinatura(Modifier.weight(1f))
+                Botao("Ajustes", actions.openSettings, tipo = TipoBotao.Discreto)
             }
         }
 
         if (tracks.isEmpty()) {
             item {
                 if (!settings.connected) {
-                    EmptyState(
-                        title = "Traga suas curtidas",
-                        body = "Conecte sua conta do YouTube. O Sonar encontra os vídeos que você curtiu e guarda as músicas no aparelho.",
-                        actionLabel = "Começar",
-                        onAction = actions.openSync,
-                    )
+                    Abertura(onStart = actions.openSync)
                 } else {
-                    EmptyState(
-                        title = if (queued > 0) "Construindo o acervo" else "Lendo suas curtidas",
-                        body = progress?.let { "${it.position} de ${it.total}: ${it.title}" }
-                            ?: if (queued > 0) "${songCount(queued)} na fila. Elas aparecem aqui assim que terminam."
-                            else "Isso leva alguns segundos.",
-                        actionLabel = "Ver operação",
-                        onAction = actions.openSync,
-                        pulse = true,
+                    Vazio(
+                        titulo = if (queued > 0) "Construindo o acervo" else "Lendo as curtidas",
+                        texto = if (queued > 0) "${songCount(queued)} na fila. Cada uma aparece aqui quando a extração termina."
+                        else "O Sonar lê a lista de curtidas e separa o que é música.",
+                        estado = estadoArs(progress, waiting, queued, syncing, settings),
+                        acao = "Ver oficina",
+                        onAcao = actions.openSync,
                     )
                 }
             }
-            item { Motto() }
             return@LazyColumn
         }
 
-        item { PlayShuffleRow(onPlay = { vm.play(tracks) }, onShuffle = { vm.shuffle(tracks) }) }
+        item {
+            Column(Modifier.padding(horizontal = Passo.p5)) {
+                Spacer(Modifier.height(Passo.p7))
+                Text(saudacao(), style = Tipo.lead, color = M.cores.tinta)
+                Spacer(Modifier.height(Passo.p5))
+                Row(horizontalArrangement = Arrangement.spacedBy(Passo.p3)) {
+                    Leitura(
+                        rotulo = "Acervo",
+                        valor = tracks.size.toString(),
+                        unidade = if (tracks.size == 1) "música" else "músicas",
+                        referencia = "${formatBytes(bytes)} no aparelho",
+                        modifier = Modifier.weight(1f),
+                    )
+                    val (valor, unidade) = decorrido(settings.lastSyncAt)
+                    Leitura(
+                        rotulo = "Última leitura",
+                        valor = valor,
+                        unidade = unidade,
+                        referencia = if (settings.lastSyncAt > 0) "em ${formatData(settings.lastSyncAt)}" else "nenhuma ainda",
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.height(Passo.p5))
+                Row(horizontalArrangement = Arrangement.spacedBy(Passo.p3)) {
+                    Botao("Tocar", { vm.play(tracks) }, Modifier.weight(1f), tipo = TipoBotao.Principal)
+                    Botao("Aleatório", { vm.shuffle(tracks) }, Modifier.weight(1f))
+                }
+            }
+        }
 
-        progress?.let { p ->
+        val ars = estadoArs(progress, waiting, queued, syncing, settings)
+        if (progress != null || (queued > 0 && waiting)) {
             item {
-                Surface(
-                    onClick = actions.openSync,
-                    color = Meridiano.GraphiteRaised,
-                    shape = MaterialTheme.shapes.small,
-                    border = BorderStroke(1.dp, Meridiano.Line),
-                    modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp),
+                Painel(
+                    Modifier.padding(start = Passo.p5, end = Passo.p5, top = Passo.p6).clickable(onClick = actions.openSync),
+                    cabecalho = {
+                        Text("Ars", style = Tipo.titulus3, color = M.cores.tinta, modifier = Modifier.weight(1f))
+                        if (ars != null) Indicador(ars.first, ars.second)
+                    },
                 ) {
-                    Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            StatusDot(Meridiano.Mineral, pulse = true)
-                            Spacer(Modifier.width(10.dp))
-                            MonoLabel("Ars · extraindo ${p.position}/${p.total}", color = Meridiano.Mineral)
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(p.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Spacer(Modifier.height(10.dp))
-                        ProgressLine(p.fraction)
+                    val p = progress
+                    if (p != null) {
+                        Text(p.title, style = Tipo.corpoForte, color = M.cores.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("${p.position} / ${p.total}", style = Tipo.dado, color = M.cores.tintaSuave)
+                        Spacer(Modifier.height(Passo.p3))
+                        Regua(p.fraction, "${(p.fraction * 100).roundToInt()} %", descricao = "Extração de ${p.title}")
+                    } else {
+                        Text("${songCount(queued)} na fila.", style = Tipo.corpo, color = M.cores.tinta)
                     }
                 }
             }
         }
 
-        // Section numbers are assigned while building the list, not inside the item lambdas.
-        var section = 0
-        val recentNumber = ++section
         item {
-            SectionHeader("Curtidas recentes", index = recentNumber)
-            CoverRow(recent, player.current?.mediaId) { index -> vm.play(recent, index) }
+            Secao("Curtidas recentes", contagem = tracks.size)
+            CoverRow(recent, currentId, player.isPlaying) { index -> vm.play(recent, index) }
         }
 
         if (mostPlayed.isNotEmpty()) {
-            val number = ++section
             item {
-                SectionHeader("Mais tocadas", index = number)
-                Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Secao("Mais tocadas")
+                Column(Modifier.padding(horizontal = Passo.p5), verticalArrangement = Arrangement.spacedBy(Passo.p3)) {
                     mostPlayed.chunked(2).forEach { pair ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Passo.p3)) {
                             pair.forEach { track ->
-                                QuickTile(track, track.videoId == player.current?.mediaId, Modifier.weight(1f)) {
+                                QuickTile(track, track.videoId == currentId, Modifier.weight(1f)) {
                                     vm.play(mostPlayed, mostPlayed.indexOf(track))
                                 }
                             }
@@ -181,19 +192,15 @@ fun HomeScreen(vm: SonarViewModel, actions: AppActions) {
         }
 
         if (artists.size >= 2) {
-            val number = ++section
             item {
-                SectionHeader("Artistas", index = number)
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Secao("Artistas")
+                LazyRow(contentPadding = PaddingValues(horizontal = Passo.p5), horizontalArrangement = Arrangement.spacedBy(Passo.p5)) {
                     items(artists, key = { it.name }) { artist ->
-                        Column(
-                            Modifier.width(96.dp).clickable { actions.openArtist(artist.name) },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Artwork(artist.tracks.first().artwork, Modifier.size(96.dp), shape = CircleShape, iconSize = 30.dp)
-                            Spacer(Modifier.height(8.dp))
-                            Text(artist.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            MonoLabel(songCount(artist.tracks.size), style = MaterialTheme.typography.labelSmall)
+                        Column(Modifier.width(96.dp).clickable { actions.openArtist(artist.name) }) {
+                            Artwork(artist.tracks.first().artwork, Modifier.size(96.dp), corte = Chanfro.m)
+                            Spacer(Modifier.height(Passo.p3))
+                            Text(artist.name, style = Tipo.nota, color = M.cores.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(artist.tracks.size.toString(), style = Tipo.dado, color = M.cores.tintaSuave)
                         }
                     }
                 }
@@ -201,92 +208,130 @@ fun HomeScreen(vm: SonarViewModel, actions: AppActions) {
         }
 
         if (rediscover.size >= 4) {
-            val number = ++section
             item {
-                SectionHeader("Redescubra", index = number)
-                CoverRow(rediscover, player.current?.mediaId) { index -> vm.play(rediscover, index) }
+                Secao("Redescubra")
+                Text(
+                    "Músicas que você não ouve há mais de 30 dias. A seleção muda a cada dia.",
+                    style = Tipo.nota,
+                    color = M.cores.tintaSuave,
+                    modifier = Modifier.padding(start = Passo.p5, end = Passo.p5, bottom = Passo.p4),
+                )
+                CoverRow(rediscover, currentId, player.isPlaying) { index -> vm.play(rediscover, index) }
             }
         }
 
         if (playlists.isNotEmpty()) {
-            val number = ++section
             item {
-                SectionHeader("Playlists", index = number)
-                LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Secao("Playlists", contagem = playlists.size)
+                LazyRow(contentPadding = PaddingValues(horizontal = Passo.p5), horizontalArrangement = Arrangement.spacedBy(Passo.p5)) {
                     items(playlists, key = { it.id }) { playlist ->
                         Column(Modifier.width(140.dp).clickable { actions.openPlaylist(playlist.id) }) {
-                            Artwork(playlist.artwork, Modifier.size(140.dp), shape = MaterialTheme.shapes.medium, iconSize = 40.dp)
-                            Spacer(Modifier.height(8.dp))
-                            Text(playlist.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            MonoLabel(songCount(playlist.trackCount), style = MaterialTheme.typography.labelSmall)
+                            Artwork(playlist.artwork, Modifier.size(140.dp), corte = Chanfro.m)
+                            Spacer(Modifier.height(Passo.p3))
+                            Text(playlist.name, style = Tipo.corpoForte, color = M.cores.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(songCount(playlist.trackCount), style = Tipo.nota, color = M.cores.tintaSuave)
                         }
                     }
                 }
             }
         }
 
-        item { Motto() }
+        item { Colofao() }
+    }
+}
+
+/** First run: the cover, the name, the motto and what the app is for. */
+@Composable
+private fun Abertura(onStart: () -> Unit) {
+    val cores = M.cores
+    Column {
+        Spacer(Modifier.height(Passo.p7))
+        Capa()
+        Column(Modifier.padding(horizontal = Passo.p5)) {
+            Spacer(Modifier.height(Passo.p6))
+            Text("Sonar", style = Tipo.monumentum, color = cores.tinta)
+            Text("Forma servit fini: a forma serve à finalidade.", style = Tipo.nota, color = cores.tintaSuave)
+            Spacer(Modifier.height(Passo.p6))
+            Rotulo("Finalidade", style = Tipo.cota)
+            Spacer(Modifier.height(Passo.p1))
+            Text(
+                "Guardar no aparelho, em áudio, as músicas que você curtiu no YouTube, e tocá-las sem anúncios, mesmo offline.",
+                style = Tipo.corpo,
+                color = cores.tinta,
+            )
+            Spacer(Modifier.height(Passo.p6))
+            Botao("Começar", onStart, Modifier.fillMaxWidth(), tipo = TipoBotao.Principal)
+            Spacer(Modifier.height(Passo.p7))
+        }
     }
 }
 
 @Composable
-private fun CoverRow(tracks: List<TrackEntity>, currentId: String?, onPlay: (Int) -> Unit) {
-    LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+private fun CoverRow(tracks: List<TrackEntity>, currentId: String?, playing: Boolean, onPlay: (Int) -> Unit) {
+    LazyRow(contentPadding = PaddingValues(horizontal = Passo.p5), horizontalArrangement = Arrangement.spacedBy(Passo.p5)) {
         itemsIndexed(tracks, key = { _, track -> track.videoId }) { index, track ->
             val current = track.videoId == currentId
             Column(Modifier.width(140.dp).clickable { onPlay(index) }) {
-                Artwork(track.artwork, Modifier.size(140.dp), shape = MaterialTheme.shapes.medium, iconSize = 40.dp)
-                Spacer(Modifier.height(10.dp))
+                Artwork(track.artwork, Modifier.size(140.dp), corte = Chanfro.m)
+                Spacer(Modifier.height(Passo.p3))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (current) {
-                        StatusDot(Meridiano.Mineral, pulse = true)
-                        Spacer(Modifier.width(6.dp))
+                        Lampada(if (playing) Estado.Aceso else Estado.Repouso, Modifier.padding(end = Passo.p2), tamanho = 9.dp)
                     }
-                    Text(
-                        track.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = if (current) Meridiano.Mineral else MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Text(track.title, style = Tipo.corpoForte, color = M.cores.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                Text(
-                    track.artist,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                Text(track.artist, style = Tipo.nota, color = M.cores.tintaSuave, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
 }
 
+/** A most-played song: cover, title and how many times it was played. */
 @Composable
 private fun QuickTile(track: TrackEntity, current: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        color = Meridiano.GraphiteRaised,
-        shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, if (current) Meridiano.Mineral else Meridiano.Line),
-        modifier = modifier,
+    val cores = M.cores
+    Row(
+        modifier
+            .peca(if (current) cores.relevo else cores.superficie, cores.linhaForte, Chanfro.p, Traco.fio)
+            .clickable(onClick = onClick)
+            .padding(Traco.fio),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Artwork(track.artwork, Modifier.size(54.dp), shape = MaterialTheme.shapes.extraSmall)
-            Spacer(Modifier.width(10.dp))
-            Text(
-                track.title,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (current) Meridiano.Mineral else MaterialTheme.colorScheme.onSurface,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(end = 8.dp),
-            )
+        Artwork(track.artwork, Modifier.size(56.dp))
+        Column(Modifier.weight(1f).padding(horizontal = Passo.p3)) {
+            Text(track.title, style = Tipo.nota, color = cores.tinta, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text("${track.playCount}×", style = Tipo.dado, color = cores.tintaSuave)
         }
     }
 }
 
-private fun greeting(): String = when (LocalTime.now().hour) {
+/** The state of the extraction stage as lamp and word, or null when it rests. */
+internal fun estadoArs(
+    progress: DownloadProgress?,
+    waiting: Boolean,
+    queued: Int,
+    syncing: Boolean,
+    settings: Settings,
+): Pair<Estado, String>? = when {
+    progress != null -> Estado.Aceso to "Extraindo ${progress.position}/${progress.total}"
+    waiting && queued > 0 -> Estado.Atencao to if (settings.wifiOnly) "Aguardando Wi-Fi" else "Aguardando rede"
+    syncing -> Estado.Aceso to "Lendo curtidas"
+    queued > 0 -> Estado.Atencao to "Na fila"
+    else -> null
+}
+
+/** Time since the last reading, as a number and its unit. */
+private fun decorrido(time: Long, now: Long = System.currentTimeMillis()): Pair<String, String?> {
+    if (time <= 0) return "—" to null
+    val minutes = (now - time).coerceAtLeast(0) / 60_000
+    return when {
+        minutes < 60 -> minutes.toString() to "min"
+        minutes < 24 * 60 -> (minutes / 60).toString() to "h"
+        else -> (minutes / (24 * 60)).toString() to if (minutes < 48 * 60) "dia" else "dias"
+    }
+}
+
+private fun saudacao(): String = when (LocalTime.now().hour) {
     in 5..11 -> "Bom dia."
     in 12..17 -> "Boa tarde."
     else -> "Boa noite."

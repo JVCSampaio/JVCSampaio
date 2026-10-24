@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- MERIDIANO palette -->
+    <!-- MERIDIANO: fundo (grafite-900) and tinta (marfim-300) at midnight. -->
     <color name="graphite">#FF121C24</color>
     <color name="ivory">#FFDAD6C9</color>
-    <color name="bronze">#FFB49363</color>
-    <color name="mineral">#FF709B9D</color>
 </resources>

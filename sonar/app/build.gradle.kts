@@ -20,7 +20,9 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "1.0.$buildNumber"
+        versionName = "1.1.$buildNumber"
+        // Shown on the identification plate (Placa) as the date of manufacture.
+        buildConfigField("String", "BUILD_DATE", "\"${java.time.LocalDate.now()}\"")
     }
 
     signingConfigs {
@@ -85,7 +87,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
@@ -96,7 +97,6 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.work.runtime)
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.androidx.palette)
     implementation(libs.play.services.auth)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)

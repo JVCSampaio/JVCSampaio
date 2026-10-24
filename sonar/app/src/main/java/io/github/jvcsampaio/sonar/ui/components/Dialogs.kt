@@ -1,27 +1,27 @@
 package io.github.jvcsampaio.sonar.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Add
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,11 +30,42 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import io.github.jvcsampaio.sonar.data.db.PlaylistSummary
 import io.github.jvcsampaio.sonar.data.db.TrackEntity
 import io.github.jvcsampaio.sonar.data.db.artwork
 import io.github.jvcsampaio.sonar.ui.songCount
+import io.github.jvcsampaio.sonar.ui.theme.Chanfro
+import io.github.jvcsampaio.sonar.ui.theme.M
+import io.github.jvcsampaio.sonar.ui.theme.Passo
+import io.github.jvcsampaio.sonar.ui.theme.Tipo
+import io.github.jvcsampaio.sonar.ui.theme.Traco
+
+/** A dialog is a panel lifted over the screen: name, body, then the commands. */
+@Composable
+fun Dialogo(
+    titulo: String,
+    onDismiss: () -> Unit,
+    confirmar: String,
+    onConfirm: () -> Unit,
+    confirmarAtivo: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Painel(nome = titulo, corpo = androidx.compose.foundation.layout.PaddingValues(Passo.p5)) {
+            content()
+            Spacer(Modifier.height(Passo.p6))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                Botao("Cancelar", onDismiss, tipo = TipoBotao.Discreto)
+                Spacer(Modifier.width(Passo.p3))
+                Botao(confirmar, onConfirm, tipo = TipoBotao.Principal, enabled = confirmarAtivo)
+            }
+        }
+    }
+}
 
 @Composable
 fun TextInputDialog(
@@ -43,30 +74,48 @@ fun TextInputDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     initial: String = "",
+    label: String = "Nome",
     placeholder: String = "Nome da playlist",
     maxLength: Int = 80,
 ) {
     var name by remember { mutableStateOf(initial) }
-    AlertDialog(
+    Dialogo(
+        titulo = title,
+        onDismiss = onDismiss,
+        confirmar = confirmLabel,
+        onConfirm = { onConfirm(name.trim()) },
+        confirmarAtivo = name.isNotBlank(),
+    ) {
+        CampoTexto(
+            valor = name,
+            onValueChange = { name = it.take(maxLength) },
+            rotulo = label,
+            placeholder = placeholder,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (name.isNotBlank()) onConfirm(name.trim()) }),
+        )
+    }
+}
+
+/** Bottom sheet with square top corners cut like a plate and a plain grip line. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Folha(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val cores = M.cores
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it.take(maxLength) },
-                singleLine = true,
-                placeholder = { Text(placeholder) },
-            )
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = CutCornerShape(topStart = Chanfro.g),
+        containerColor = cores.superficie,
+        contentColor = cores.tinta,
+        tonalElevation = 0.dp,
+        dragHandle = {
+            Box(Modifier.padding(vertical = Passo.p4).size(Passo.p7, Traco.medio).background(cores.linhaForte))
         },
-        confirmButton = {
-            TextButton(onClick = { onConfirm(name.trim()) }, enabled = name.isNotBlank()) { Text(confirmLabel) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        content = content,
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddToPlaylistSheet(
     track: TrackEntity,
@@ -76,43 +125,37 @@ fun AddToPlaylistSheet(
     onDismiss: () -> Unit,
 ) {
     var creating by remember { mutableStateOf(false) }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-    ) {
+    val cores = M.cores
+    Folha(onDismiss) {
         Column(Modifier.navigationBarsPadding()) {
-            Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(track.artwork, Modifier.size(44.dp))
-                Spacer(Modifier.width(12.dp))
-                Column {
-                    Text("Adicionar à playlist", style = MaterialTheme.typography.titleMedium)
-                    Text(track.title, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Row(
+                Modifier.padding(horizontal = Passo.p5, vertical = Passo.p3),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Passo.p4),
+            ) {
+                Artwork(track.artwork, Modifier.size(Passo.p8))
+                Column(Modifier.weight(1f)) {
+                    Rotulo("Adicionar à playlist", style = Tipo.cota)
+                    Text(track.title, style = Tipo.corpoForte, color = cores.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            LazyColumn(Modifier.padding(bottom = 16.dp)) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().clickable { creating = true }.padding(horizontal = 20.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Rounded.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                        Spacer(Modifier.width(14.dp))
-                        Text("Nova playlist", style = MaterialTheme.typography.titleSmall)
-                    }
-                }
+            Botao(
+                "Criar playlist",
+                onClick = { creating = true },
+                modifier = Modifier.padding(horizontal = Passo.p5, vertical = Passo.p3),
+            )
+            Fio(Modifier.fillMaxWidth().padding(top = Passo.p3))
+            LazyColumn(Modifier.padding(bottom = Passo.p5)) {
                 items(playlists, key = { it.id }) { playlist ->
                     Row(
-                        Modifier.fillMaxWidth().clickable { onPick(playlist) }.padding(horizontal = 20.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth().clickable { onPick(playlist) }.padding(horizontal = Passo.p5, vertical = Passo.p3),
                         verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Passo.p5),
                     ) {
                         Artwork(playlist.artwork, Modifier.size(48.dp))
-                        Spacer(Modifier.width(14.dp))
-                        Column {
-                            Text(playlist.name, style = MaterialTheme.typography.titleSmall)
-                            Text(songCount(playlist.trackCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(Modifier.weight(1f)) {
+                            Text(playlist.name, style = Tipo.corpoForte, color = cores.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(songCount(playlist.trackCount), style = Tipo.nota, color = cores.tintaSuave)
                         }
                     }
                 }

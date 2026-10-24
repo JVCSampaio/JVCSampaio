@@ -25,9 +25,9 @@ enum class AudioFormat(
     /** yt-dlp --audio-format value. */
     val extension: String,
 ) {
-    OPUS("Opus", "Melhor qualidade por MB. Recomendado.", "bestaudio[acodec=opus]/bestaudio/best", "opus"),
-    M4A("M4A (AAC)", "Toca em qualquer aparelho, carro ou computador.", "bestaudio[ext=m4a]/bestaudio/best", "m4a"),
-    MP3("MP3", "Máxima compatibilidade; é recodificado e perde um pouco de qualidade.", "bestaudio/best", "mp3"),
+    OPUS("Opus", "O áudio do YouTube como ele é, sem recodificar. Padrão.", "bestaudio[acodec=opus]/bestaudio/best", "opus"),
+    M4A("M4A", "AAC do YouTube, sem recodificar. Toca em carros e computadores antigos.", "bestaudio[ext=m4a]/bestaudio/best", "m4a"),
+    MP3("MP3", "Recodificado a partir do original: perde um pouco de qualidade, toca em qualquer lugar.", "bestaudio/best", "mp3"),
 }
 
 data class Settings(
@@ -45,6 +45,8 @@ data class Settings(
     val lastSyncFound: Int = 0,
     val lastSyncError: String? = null,
     val engineCheckedAt: Long = 0,
+    /** MERIDIANO theme: midnight (default, for screens) or noon (for long reading in daylight). */
+    val meioDia: Boolean = false,
 ) {
     val filters get() = FilterSettings(musicOnly, skipShort, maxDurationMinutes)
 }
@@ -98,6 +100,7 @@ class SettingsRepository(context: Context) {
         lastSyncFound = this[Keys.lastSyncFound] ?: 0,
         lastSyncError = this[Keys.lastSyncError],
         engineCheckedAt = this[Keys.engineCheckedAt] ?: 0,
+        meioDia = this[Keys.meioDia] ?: false,
     )
 
     private fun MutablePreferences.write(s: Settings) {
@@ -115,6 +118,7 @@ class SettingsRepository(context: Context) {
         this[Keys.lastSyncFound] = s.lastSyncFound
         if (s.lastSyncError != null) this[Keys.lastSyncError] = s.lastSyncError else remove(Keys.lastSyncError)
         this[Keys.engineCheckedAt] = s.engineCheckedAt
+        this[Keys.meioDia] = s.meioDia
     }
 
     private object Keys {
@@ -132,6 +136,7 @@ class SettingsRepository(context: Context) {
         val lastSyncFound = intPreferencesKey("last_sync_found")
         val lastSyncError = stringPreferencesKey("last_sync_error")
         val engineCheckedAt = longPreferencesKey("engine_checked_at")
+        val meioDia = booleanPreferencesKey("theme_meio_dia")
         val queueIds = stringPreferencesKey("queue_ids")
         val queueIndex = intPreferencesKey("queue_index")
         val queuePosition = longPreferencesKey("queue_position")

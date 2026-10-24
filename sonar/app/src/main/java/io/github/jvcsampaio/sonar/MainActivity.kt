@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
@@ -36,8 +37,15 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
         setContent {
-            SonarTheme {
-                val vm: SonarViewModel = viewModel()
+            val vm: SonarViewModel = viewModel()
+            val settings by vm.settings.collectAsStateWithLifecycle()
+            val meioDia = settings.meioDia
+            DisposableEffect(meioDia) {
+                val style = if (meioDia) SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT) else SystemBarStyle.dark(Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+                onDispose {}
+            }
+            SonarTheme(meioDia = meioDia) {
                 val open by openPlayer.collectAsStateWithLifecycle()
                 val shared by sharedText.collectAsStateWithLifecycle()
                 RequestNotificationPermission()
