@@ -3,6 +3,7 @@ package io.github.jvcsampaio.sonar.ui.screens
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -89,6 +91,8 @@ fun SyncScreen(vm: SonarViewModel, actions: AppActions) {
     var addingLink by remember { mutableStateOf(false) }
 
     val connect = rememberGoogleConnect(vm)
+    val signInError by vm.signInError.collectAsStateWithLifecycle()
+    val uriHandler = LocalUriHandler.current
     val done = counts[TrackStatus.DONE] ?: 0
     val queued = (counts[TrackStatus.QUEUED] ?: 0) + (counts[TrackStatus.DOWNLOADING] ?: 0)
     val failed = counts[TrackStatus.FAILED] ?: 0
@@ -125,6 +129,20 @@ fun SyncScreen(vm: SonarViewModel, actions: AppActions) {
                     )
                     Spacer(Modifier.height(16.dp))
                     Button(onClick = connect, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Conectar com o Google") }
+                    signInError?.let { error ->
+                        Spacer(Modifier.height(14.dp))
+                        ErrorNote(error)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Antes do primeiro login, o Google exige um projeto seu no Google Cloud (grátis, uns 10 minutos).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                    TextButton(onClick = { uriHandler.openUri(SETUP_GUIDE_URL) }, contentPadding = PaddingValues(0.dp)) {
+                        Text("Ver o passo a passo")
+                    }
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.CloudDone, contentDescription = null, tint = MaterialTheme.colorScheme.tertiary)
@@ -156,15 +174,9 @@ fun SyncScreen(vm: SonarViewModel, actions: AppActions) {
                         TextButton(onClick = vm::disconnect) { Text("Desconectar") }
                     }
                 }
-                settings.lastSyncError?.let { error ->
+                settings.lastSyncError?.takeIf { settings.connected }?.let { error ->
                     Spacer(Modifier.height(14.dp))
-                    Surface(color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f), shape = MaterialTheme.shapes.small) {
-                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.width(10.dp))
-                            Text(error, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                        }
-                    }
+                    ErrorNote(error)
                     if (settings.connected && error.contains("conta", ignoreCase = true)) {
                         TextButton(onClick = connect) { Text("Conectar de novo") }
                     }
@@ -357,6 +369,17 @@ private fun Stat(label: String, value: Int, icon: ImageVector, modifier: Modifie
 }
 
 @Composable
+private fun ErrorNote(text: String) {
+    Surface(color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f), shape = MaterialTheme.shapes.small) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Spacer(Modifier.width(10.dp))
+            Text(text, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
 private fun Card(content: @Composable () -> Unit) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -373,16 +396,25 @@ private fun rememberGoogleConnect(vm: SonarViewModel): () -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        // A failed consent screen also returns RESULT_CANCELED; the real reason is in the intent.
         val data = result.data
-        if (result.resultCode != Activity.RESULT_OK || data == null) {
-            vm.say("Login cancelado")
+        if (data == null) {
+            Log.w(TAG, "Consent screen closed without data, resultCode=${result.resultCode}")
+            vm.onSignInFailed(GoogleAuth.CANCELLED_MESSAGE)
             return@rememberLauncherForActivityResult
         }
         runCatching { vm.auth.resultFromIntent(data) }
-            .onSuccess { if (it.accessToken != null) vm.onSignedIn() else vm.say("O Google não liberou o acesso às curtidas") }
-            .onFailure { vm.say(GoogleAuth.describe(it)) }
+            .onSuccess {
+                if (it.accessToken != null) vm.onSignedIn()
+                else vm.onSignInFailed("O Google não liberou o acesso às curtidas. Tente de novo e permita ver sua conta do YouTube.")
+            }
+            .onFailure {
+                Log.w(TAG, "Consent failed, resultCode=${result.resultCode}", it)
+                vm.onSignInFailed(GoogleAuth.describe(it))
+            }
     }
     return {
+        vm.onSignInStarted()
         scope.launch {
             val activity = context.findActivity() ?: return@launch
             runCatching { vm.auth.authorize(activity) }
@@ -394,10 +426,18 @@ private fun rememberGoogleConnect(vm: SonarViewModel): () -> Unit {
                         vm.onSignedIn()
                     }
                 }
-                .onFailure { vm.say(GoogleAuth.describe(it)) }
+                .onFailure {
+                    Log.w(TAG, "authorize() failed", it)
+                    vm.onSignInFailed(GoogleAuth.describe(it))
+                }
         }
     }
 }
+
+private const val TAG = "SyncScreen"
+private const val SETUP_GUIDE_URL =
+    "https://github.com/JVCSampaio/JVCSampaio/blob/claude/android-youtube-downloader-app-pxb9br/sonar/README.md" +
+        "#configurar-o-acesso-ao-youtube-uma-vez-uns-10-minutos"
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this

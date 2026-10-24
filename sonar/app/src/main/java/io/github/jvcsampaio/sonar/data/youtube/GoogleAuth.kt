@@ -50,13 +50,23 @@ class GoogleAuth(private val context: Context) {
 
         fun describe(error: Throwable): String = when (val code = (error as? ApiException)?.statusCode) {
             CommonStatusCodes.DEVELOPER_ERROR ->
-                "O Google recusou o app (erro 10). Confira o nome do pacote e o SHA-1 no cliente OAuth do Google Cloud."
+                "O Google recusou o Sonar (erro 10): falta o cliente Android no seu projeto do Google Cloud, " +
+                    "ou o nome do pacote ou o SHA-1 não confere. Veja o passo a passo abaixo."
             CommonStatusCodes.NETWORK_ERROR -> "Sem conexão com o Google. Tente de novo."
-            CommonStatusCodes.CANCELED -> "Login cancelado."
+            CommonStatusCodes.CANCELED, SIGN_IN_CANCELLED -> CANCELLED_MESSAGE
             CommonStatusCodes.SIGN_IN_REQUIRED -> "Entre na sua conta Google para continuar."
             null -> error.message ?: "Falha no login do Google."
             else -> "Falha no login do Google (código $code)."
         }
+
+        /** The consent screen closed without a token: setup missing, access blocked, or backed out. */
+        const val CANCELLED_MESSAGE =
+            "O Google não concluiu o login. Sem o projeto no Google Cloud ele sempre falha: siga o passo a " +
+                "passo abaixo. Se o Google mostrou \"Acesso bloqueado\", adicione seu e-mail em Usuários de " +
+                "teste. Se apareceu \"app não verificado\", toque em Avançado e depois em Ir para Sonar."
+
+        /** GoogleSignInStatusCodes.SIGN_IN_CANCELLED, returned by some Play services versions. */
+        private const val SIGN_IN_CANCELLED = 12501
     }
 }
 

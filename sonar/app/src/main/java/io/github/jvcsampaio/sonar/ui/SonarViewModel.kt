@@ -60,7 +60,20 @@ class SonarViewModel(application: Application) : AndroidViewModel(application) {
         say("Adicionada à fila")
     }
 
+    private val _signInError = MutableStateFlow<String?>(null)
+    /** Why the last Google sign-in failed; stays on screen until the next attempt. */
+    val signInError: StateFlow<String?> = _signInError.asStateFlow()
+
+    fun onSignInStarted() {
+        _signInError.value = null
+    }
+
+    fun onSignInFailed(message: String) {
+        _signInError.value = message
+    }
+
     fun onSignedIn() = launch {
+        _signInError.value = null
         app.settings.update { it.copy(connected = true, lastSyncError = null) }
         app.scheduler.syncNow()
     }
