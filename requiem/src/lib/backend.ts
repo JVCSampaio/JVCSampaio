@@ -50,6 +50,7 @@ export interface Backend {
   accountDisconnect(): Promise<void>;
   lyrics(id: string): Promise<Lyrics | null>;
   openLibraryFolder(): Promise<void>;
+  libraryRescan(): Promise<void>;
   pickFolder(current: string): Promise<string | null>;
   pickCookieFile(): Promise<string | null>;
   tourMark(name: string): Promise<boolean>;
@@ -113,6 +114,7 @@ async function tauriBackend(): Promise<Backend> {
     accountDisconnect: () => invoke("account_disconnect"),
     lyrics: (id) => invoke("lyrics", { id }),
     openLibraryFolder: () => invoke("open_library_folder"),
+    libraryRescan: () => invoke("library_rescan"),
     pickFolder: async (current) => {
       const picked = await open({ directory: true, defaultPath: current || undefined, title: "Onde guardar a biblioteca" });
       return typeof picked === "string" ? picked : null;

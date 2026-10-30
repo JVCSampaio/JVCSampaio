@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { backend } from "@/lib/backend";
-import type { EngineEvent, InstallStep, Item, Overview, Playlist, Progress, Settings, SyncStatus, ToolsStatus } from "@/lib/types";
+import type { EngineEvent, InstallStep, Item, LocalStatus, Overview, Playlist, Progress, Settings, SyncStatus, ToolsStatus } from "@/lib/types";
 import { toast } from "./toasts";
 
 interface ToolsState {
@@ -21,6 +21,8 @@ interface LibraryState {
   sync: SyncStatus | null;
   tools: ToolsState;
   settings: Settings | null;
+  /** Reading the folders of songs already on the computer. */
+  local: LocalStatus;
   init(): Promise<void>;
   reload(): Promise<void>;
   reloadPlaylists(): Promise<void>;
@@ -37,6 +39,7 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
   sync: null,
   tools: { status: null, installing: false, step: null, error: null },
   settings: null,
+  local: { running: false, found: 0 },
 
   async init() {
     const api = await backend();
@@ -48,7 +51,7 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
         api.syncStatus(),
         api.toolsStatus(),
       ]);
-      set({ overview, settings, sync, tools });
+      set({ overview, settings, sync, tools, local: overview.local });
       await get().reload();
       set({ ready: true });
     } catch (e) {
@@ -118,6 +121,13 @@ function handleEvent(event: EngineEvent) {
       break;
     case "settings":
       set({ settings: event.settings });
+      // The folders shown in Ajustes come from the engine, which resolves the default one.
+      void backend()
+        .then((api) => api.overview())
+        .then((overview) => set({ overview }));
+      break;
+    case "local":
+      set({ local: { running: event.running, found: event.found } });
       break;
   }
 }

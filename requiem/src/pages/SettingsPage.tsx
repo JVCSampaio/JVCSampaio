@@ -1,10 +1,10 @@
-import { ArrowClockwise, CaretDown, CheckCircle, FolderOpen, WarningCircle, YoutubeLogo } from "@phosphor-icons/react";
+import { ArrowClockwise, CaretDown, CheckCircle, FolderOpen, FolderPlus, FolderSimple, WarningCircle, X, YoutubeLogo } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Segmented, Skeleton, Switch } from "@/components/ui/Controls";
 import { Dropdown } from "@/components/ui/Menu";
 import { backend } from "@/lib/backend";
-import { cn } from "@/lib/format";
+import { cn, count } from "@/lib/format";
 import type { AccountTest, Settings } from "@/lib/types";
 import { useLibrary } from "@/state/library";
 import { toast } from "@/state/toasts";
@@ -23,13 +23,15 @@ const BROWSERS: Array<{ id: string; label: string }> = [
 
 const browserLabel = (id: string) => BROWSERS.find((b) => b.id === id)?.label ?? id;
 
-export function SettingsPage({ section }: { section?: "account" }) {
+export function SettingsPage({ section }: { section?: "account" | "folders" }) {
   const settings = useLibrary((s) => s.settings);
   const save = useLibrary((s) => s.saveSettings);
   const accountRef = useRef<HTMLElement>(null);
+  const foldersRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (section === "account") accountRef.current?.scrollIntoView({ block: "start" });
+    const target = section === "account" ? accountRef : section === "folders" ? foldersRef : null;
+    target?.current?.scrollIntoView({ block: "start" });
   }, [section]);
 
   if (!settings) return null;
@@ -130,6 +132,10 @@ export function SettingsPage({ section }: { section?: "account" }) {
         </Row>
       </Group>
 
+      <Group title="Músicas do computador" ref={foldersRef}>
+        <FoldersSection settings={settings} set={set} />
+      </Group>
+
       <Group title="Onde guardar">
         <Row
           title="Pasta da biblioteca"
@@ -202,6 +208,54 @@ function Row({ title, description, htmlFor, children }: { title: string; descrip
       </div>
       <div className="shrink-0">{children}</div>
     </div>
+  );
+}
+
+/** The folders whose songs and videos join the library, read again whenever they change. */
+function FoldersSection({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
+  const overview = useLibrary((s) => s.overview);
+  const local = useLibrary((s) => s.local);
+  // Until the person edits the list, the engine reads the computer's Music folder.
+  const folders = settings.musicFolders ?? (overview?.localFolders ?? []).filter((f) => f !== settings.libraryDir);
+
+  return (
+    <>
+      <p className="pb-2 pt-1 text-[15px] text-muted-foreground">
+        O Requiem mostra na biblioteca as músicas e os vídeos destas pastas, com capa, artista e álbum. Os arquivos ficam onde estão.
+      </p>
+      {folders.map((folder) => (
+        <div key={folder} className="flex items-center gap-3 py-3">
+          <FolderSimple className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 break-all text-[15px] text-foreground" data-selectable>
+            {folder}
+          </span>
+          <IconButton label="Tirar esta pasta" size="sm" onClick={() => set({ musicFolders: folders.filter((f) => f !== folder) })}>
+            <X className="h-4 w-4" />
+          </IconButton>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-4 py-4">
+        <Button
+          icon={<FolderPlus className="h-4 w-4" />}
+          onClick={async () => {
+            const picked = await (await backend()).pickFolder(folders[0] ?? "");
+            if (picked && !folders.includes(picked)) set({ musicFolders: [...folders, picked] });
+          }}
+        >
+          Adicionar pasta
+        </Button>
+        <Button variant="ghost" icon={<ArrowClockwise className="h-4 w-4" />} disabled={local.running} onClick={async () => (await backend()).libraryRescan()}>
+          Ler de novo
+        </Button>
+        <p className="text-[13px] text-muted-foreground" aria-live="polite">
+          {local.running
+            ? `Lendo as pastas, ${count(local.found, "arquivo encontrado", "arquivos encontrados")} até agora.`
+            : local.found
+              ? `${count(local.found, "música ou vídeo", "músicas e vídeos")} destas pastas na biblioteca.`
+              : "Nenhuma música encontrada nestas pastas."}
+        </p>
+      </div>
+    </>
   );
 }
 

@@ -13,6 +13,7 @@ use tokio::sync::{broadcast, Notify};
 use crate::cookies::{self, CookieRecord};
 use crate::db::{now_ms, Db, Finished, Item, NewItem, Playlist};
 use crate::links::{self, Pasted};
+use crate::local;
 use crate::lyrics::{self, Cached, Lyrics};
 use crate::media::{self, Decision, Entry, Kind, Rules};
 use crate::server::{self, Asset};
@@ -28,6 +29,8 @@ pub struct Paths {
     pub data: PathBuf,
     /// Where songs and videos go when the person never chose a folder.
     pub default_library: PathBuf,
+    /// The computer's Music folder, read into the library unless the person picks others.
+    pub music: Option<PathBuf>,
 }
 
 impl Paths {
@@ -87,6 +90,16 @@ pub enum Event {
     Settings {
         settings: Box<Settings>,
     },
+    Local(LocalStatus),
+}
+
+/// Reading the folders of songs already on the computer.
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalStatus {
+    pub running: bool,
+    /// Songs and videos from the folders in the library (so far, while running).
+    pub found: usize,
 }
 
 /// Where the tools stand: what is installed, an install under way, the last failure. Kept by
@@ -124,6 +137,9 @@ pub struct Overview {
     pub data_dir: String,
     pub library_dir: String,
     pub platform: String,
+    /// The folders read into the library, the Music folder when the person chose none.
+    pub local_folders: Vec<String>,
+    pub local: LocalStatus,
 }
 
 pub struct Engine {
@@ -139,6 +155,8 @@ pub struct Engine {
     sync: Mutex<SyncStatus>,
     installing: AtomicBool,
     tools_report: Mutex<ToolsReport>,
+    wake_scan: Notify,
+    local: Mutex<LocalStatus>,
     media_base: RwLock<String>,
 }
 
@@ -178,6 +196,8 @@ impl Engine {
             sync: Mutex::new(SyncStatus::default()),
             installing: AtomicBool::new(false),
             tools_report: Mutex::new(ToolsReport::default()),
+            wake_scan: Notify::new(),
+            local: Mutex::new(LocalStatus::default()),
             media_base: RwLock::new(String::new()),
         });
 
@@ -203,6 +223,8 @@ impl Engine {
         tokio::spawn(async move { syncer.sync_loop().await });
         let setup = engine.clone();
         tokio::spawn(async move { setup.prepare_tools().await });
+        let reader = engine.clone();
+        tokio::spawn(async move { reader.scan_loop().await });
         Ok(engine)
     }
 
@@ -231,6 +253,8 @@ impl Engine {
             data_dir: self.paths.data.to_string_lossy().into_owned(),
             library_dir: self.settings().library_dir,
             platform: std::env::consts::OS.into(),
+            local_folders: self.local_folders().iter().map(|f| f.to_string_lossy().into_owned()).collect(),
+            local: *self.local.lock().unwrap(),
         }
     }
 
@@ -240,12 +264,18 @@ impl Engine {
             next.library_dir = self.paths.default_library.to_string_lossy().into_owned();
         }
         self.db.kv_set("settings", &serde_json::to_string(&next)?)?;
-        let account_changed = {
+        let (account_changed, folders_changed) = {
             let mut current = self.settings.write().unwrap();
-            let changed = current.account != next.account;
+            let changed = (
+                current.account != next.account,
+                current.music_folders != next.music_folders || current.library_dir != next.library_dir,
+            );
             *current = next.clone();
             changed
         };
+        if folders_changed {
+            self.wake_scan.notify_one();
+        }
         self.wake_sync.notify_waiters();
         // The login window and the tray change settings too; every view hears about it.
         self.emit(Event::Settings { settings: Box::new(next.clone()) });
@@ -328,6 +358,75 @@ impl Engine {
         let status = self.tools.status().await;
         self.report_tools(ToolsReport { status: status.clone(), ..Default::default() });
         Ok(status)
+    }
+
+    // Songs already on the computer
+
+    /// The folders read into the library: the ones the person chose (the Music folder until
+    /// then) and the folder downloads go to. A folder inside another is read with it.
+    pub fn local_folders(&self) -> Vec<PathBuf> {
+        let settings = self.settings();
+        let mut folders: Vec<PathBuf> = match &settings.music_folders {
+            Some(list) => list.iter().filter(|f| !f.trim().is_empty()).map(PathBuf::from).collect(),
+            None => self.paths.music.iter().cloned().collect(),
+        };
+        folders.push(PathBuf::from(&settings.library_dir));
+        folders.sort();
+        folders.dedup();
+        let all = folders.clone();
+        folders.retain(|f| !all.iter().any(|other| other != f && f.starts_with(other)));
+        folders
+    }
+
+    /// Reads the folders again, after the current reading if one is running.
+    pub fn rescan(&self) {
+        self.wake_scan.notify_one();
+    }
+
+    async fn scan_loop(self: Arc<Self>) {
+        loop {
+            self.scan_local().await;
+            self.wake_scan.notified().await;
+        }
+    }
+
+    async fn scan_local(self: &Arc<Self>) {
+        let folders = self.local_folders();
+        let found = self.local.lock().unwrap().found;
+        self.set_local(LocalStatus { running: true, found });
+        let engine = self.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            local::scan(&engine.db, &folders, &engine.paths.covers(), |found| {
+                engine.set_local(LocalStatus { running: true, found })
+            })
+        })
+        .await;
+        let found = match result {
+            Ok(Ok(report)) => {
+                if report.changed() {
+                    log::info!("music folders: {report:?}");
+                    self.emit(Event::Library);
+                }
+                if report.removed > 0 {
+                    self.emit(Event::Playlists);
+                }
+                report.found
+            }
+            Ok(Err(e)) => {
+                log::warn!("reading the music folders failed: {e:#}");
+                found
+            }
+            Err(e) => {
+                log::warn!("reading the music folders stopped: {e}");
+                found
+            }
+        };
+        self.set_local(LocalStatus { running: false, found });
+    }
+
+    fn set_local(&self, status: LocalStatus) {
+        *self.local.lock().unwrap() = status;
+        self.emit(Event::Local(status));
     }
 
     // Library
@@ -941,6 +1040,109 @@ fn remove_partials(stem: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Stand-in for yt-dlp: answers the version, the update, the read of one video and its
+    /// download, with the output lines the real one prints for Requiem.
+    #[cfg(unix)]
+    const FAKE_YTDLP: &str = r#"#!/bin/sh
+for arg in "$@"; do
+  case "$arg" in
+    --version) echo 2026.01.01; exit 0 ;;
+    -U) exit 0 ;;
+  esac
+done
+out=""; load=""; prev=""
+for arg in "$@"; do
+  case "$prev" in
+    -o) case "$arg" in thumbnail:*) ;; *) out="$arg" ;; esac ;;
+    --load-info-json) load="$arg" ;;
+  esac
+  prev="$arg"
+done
+if [ -n "$load" ]; then
+  file=$(printf '%s' "$out" | sed 's/\.%(ext)s$/.m4a/')
+  printf 'not really audio' > "$file"
+  echo "RQDL 8 16 NA 1000 1 140"
+  echo "RQDL 16 16 NA 1000 0 140"
+  echo "RQPATH $file"
+  exit 0
+fi
+echo '{"id":"dQw4w9WgXcQ","title":"Rick Astley - Never Gonna Give You Up (Official Video)","channel":"Rick Astley","duration":213,"categories":["Music"]}'
+"#;
+
+    /// The path the person depends on, with everything but YouTube real: a song asked for in
+    /// the search downloads, lands in the library with its file, stays single after the music
+    /// folders are read, and the player's server streams it.
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_requested_song_lands_in_the_library_and_plays() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths { data: dir.path().join("data"), default_library: dir.path().join("Requiem"), music: None };
+        std::fs::create_dir_all(paths.bin()).unwrap();
+        let version = |line: &str| format!("#!/bin/sh\necho '{line}'\n");
+        for (name, body) in [
+            ("yt-dlp", FAKE_YTDLP.to_string()),
+            ("deno", version("deno 2.0.0")),
+            ("ffmpeg", version("ffmpeg version 7.0")),
+            ("ffprobe", version("ffprobe version 7.0")),
+        ] {
+            let path = paths.bin().join(name);
+            std::fs::write(&path, body).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let engine = Engine::start(paths).await.unwrap();
+
+        let entry = Entry {
+            id: "dQw4w9WgXcQ".into(),
+            title: "Never Gonna Give You Up".into(),
+            artist: "Rick Astley".into(),
+            channel: "Rick Astley".into(),
+            duration: Some(213.0),
+            thumbnail: String::new(),
+            is_short: false,
+        };
+        engine.request(&entry, Kind::Music, "search").unwrap();
+        let mut finished = None;
+        for _ in 0..200 {
+            let item = engine.db.get(&entry.id).unwrap().unwrap();
+            if item.status == "done" || item.status == "failed" {
+                finished = Some(item);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let item = finished.expect("the download never finished");
+        assert_eq!(item.status, "done", "{:?}", item.error);
+        assert_eq!((item.title.as_str(), item.artist.as_str()), ("Never Gonna Give You Up", "Rick Astley"));
+        let file = PathBuf::from(item.file_path.unwrap());
+        assert!(file.starts_with(dir.path().join("Requiem").join("Músicas")), "{}", file.display());
+
+        let mut events = engine.subscribe();
+        engine.rescan();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let mut started = false;
+            loop {
+                if let Ok(Event::Local(status)) = events.recv().await {
+                    if status.running {
+                        started = true;
+                    } else if started {
+                        break;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("the folders were not read again");
+        let library = engine.library().unwrap();
+        assert_eq!(library.len(), 1, "{library:?}");
+
+        let url = format!("{}/m/{}", engine.overview().media_base, entry.id);
+        let http = reqwest::Client::builder().no_proxy().build().unwrap();
+        let body = http.get(url).send().await.unwrap().bytes().await.unwrap();
+        assert_eq!(&body[..], b"not really audio");
+    }
 
     #[test]
     fn events_have_the_shape_the_interface_reads() {

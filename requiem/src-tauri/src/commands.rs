@@ -213,6 +213,11 @@ pub fn open_library_folder(app: AppHandle, state: State<'_, AppState>) -> Res<()
     app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(msg)
 }
 
+#[tauri::command]
+pub fn library_rescan(state: State<'_, AppState>) {
+    state.engine.rescan();
+}
+
 /// The CI screenshot tour: the interface walks its screens and prints a mark at each one, and
 /// the workflow captures the window. Off unless REQUIEM_TOUR is set; the answer says which.
 #[tauri::command]

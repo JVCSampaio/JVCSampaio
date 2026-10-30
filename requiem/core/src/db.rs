@@ -4,6 +4,7 @@
 use anyhow::Result;
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -65,6 +66,32 @@ pub struct Finished {
     pub file_size: Option<i64>,
     pub width: Option<i64>,
     pub height: Option<i64>,
+}
+
+/// A song or video already on the computer, found in one of the person's folders.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LocalFile {
+    pub id: String,
+    pub kind: String,
+    pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
+    pub duration: Option<f64>,
+    pub file_path: String,
+    pub thumb_path: Option<String>,
+    pub file_size: i64,
+    /// The file's modification time, in ms. With the size, it tells a changed file.
+    pub modified: i64,
+}
+
+/// What the library knows about a local file, removed ones included.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocalRow {
+    pub id: String,
+    pub status: String,
+    pub file_path: Option<String>,
+    pub file_size: Option<i64>,
+    pub modified: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -320,6 +347,84 @@ impl Db {
 
     pub fn clear_failed(&self) -> Result<usize> {
         Ok(self.lock().execute("UPDATE items SET status = 'removed' WHERE status IN ('failed', 'skipped')", [])?)
+    }
+
+    // Files already on the computer
+
+    /// Local rows by id. A removed one keeps its file out of the library.
+    pub fn local_rows(&self) -> Result<HashMap<String, LocalRow>> {
+        let conn = self.lock();
+        let mut stmt =
+            conn.prepare("SELECT id, status, file_path, file_size, downloaded_at FROM items WHERE source = 'local'")?;
+        let rows = stmt
+            .query_map([], |r| {
+                Ok(LocalRow {
+                    id: r.get(0)?,
+                    status: r.get(1)?,
+                    file_path: r.get(2)?,
+                    file_size: r.get(3)?,
+                    modified: r.get(4)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows.into_iter().map(|r| (r.id.clone(), r)).collect())
+    }
+
+    /// Ids and files of everything the downloads brought, so a folder scan does not list a
+    /// downloaded song a second time, finished or still being written.
+    pub fn downloaded(&self) -> Result<(HashSet<String>, HashSet<String>)> {
+        let conn = self.lock();
+        let mut stmt = conn.prepare("SELECT id, file_path FROM items WHERE source <> 'local'")?;
+        let mut ids = HashSet::new();
+        let mut paths = HashSet::new();
+        let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)))?;
+        for row in rows {
+            let (id, path) = row?;
+            ids.insert(id);
+            paths.extend(path);
+        }
+        Ok((ids, paths))
+    }
+
+    /// Adds a local file to the library, or refreshes its tags. Never brings back one the
+    /// person removed.
+    pub fn put_local(&self, f: &LocalFile) -> Result<()> {
+        self.lock().execute(
+            "INSERT INTO items (id, kind, title, artist, album, channel, duration, source, status, file_path, thumb_path,
+                file_size, added_at, seen_at, downloaded_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?4, ?6, 'local', 'done', ?7, ?8, ?9, ?10, ?11, ?11)
+             ON CONFLICT(id) DO UPDATE SET
+                kind = excluded.kind, title = excluded.title, artist = excluded.artist, album = excluded.album,
+                channel = excluded.channel, duration = excluded.duration, file_path = excluded.file_path,
+                thumb_path = excluded.thumb_path, file_size = excluded.file_size, downloaded_at = excluded.downloaded_at
+             WHERE items.status = 'done' AND items.source = 'local'",
+            params![
+                f.id,
+                f.kind,
+                f.title,
+                f.artist,
+                f.album,
+                f.duration,
+                f.file_path,
+                f.thumb_path,
+                f.file_size,
+                now_ms(),
+                f.modified
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Forgets local files that left the disk or the chosen folders.
+    pub fn drop_local(&self, ids: &[String]) -> Result<()> {
+        let mut conn = self.lock();
+        let tx = conn.transaction()?;
+        for id in ids {
+            tx.execute("DELETE FROM playlist_items WHERE item_id = ?1", [id])?;
+            tx.execute("DELETE FROM items WHERE id = ?1 AND source = 'local'", [id])?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn played(&self, id: &str) -> Result<()> {

@@ -68,6 +68,13 @@ export interface Settings {
   audioFormat: "m4a" | "mp3";
   closeToTray: boolean;
   launchAtLogin: boolean;
+  /** Folders read into the library. null: the computer's Music folder. */
+  musicFolders: string[] | null;
+}
+
+export interface LocalStatus {
+  running: boolean;
+  found: number;
 }
 
 export interface SyncStatus {
@@ -116,7 +123,8 @@ export type EngineEvent =
   | { type: "sync"; status: SyncStatus }
   | ({ type: "tools" } & ToolsReport)
   | { type: "notice"; message: string }
-  | { type: "settings"; settings: Settings };
+  | { type: "settings"; settings: Settings }
+  | ({ type: "local" } & LocalStatus);
 
 export type Resolved =
   | { type: "video"; entry: Entry }
@@ -135,6 +143,8 @@ export interface Overview {
   dataDir: string;
   libraryDir: string;
   platform: string;
+  localFolders: string[];
+  local: LocalStatus;
 }
 
 export interface LyricLine {

@@ -25,16 +25,17 @@ pub fn show_main<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 }
 
 fn data_paths(app: &tauri::App) -> anyhow::Result<Paths> {
-    // REQUIEM_DATA_DIR lets the CI screenshot tour use a prepared library.
+    // The REQUIEM_* variables let the CI screenshot tour use prepared folders.
     let data = match std::env::var_os("REQUIEM_DATA_DIR") {
         Some(dir) => PathBuf::from(dir),
         None => app.path().app_data_dir()?,
     };
+    let music = std::env::var_os("REQUIEM_MUSIC_DIR").map(PathBuf::from).or_else(|| app.path().audio_dir().ok());
     let library = std::env::var_os("REQUIEM_LIBRARY_DIR")
         .map(PathBuf::from)
-        .or_else(|| app.path().audio_dir().ok().map(|d| d.join("Requiem")))
+        .or_else(|| music.as_ref().map(|d| d.join("Requiem")))
         .unwrap_or_else(|| data.join("Biblioteca"));
-    Ok(Paths { data, default_library: library })
+    Ok(Paths { data, default_library: library, music })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -141,6 +142,7 @@ pub fn run() {
             commands::account_disconnect,
             commands::lyrics,
             commands::open_library_folder,
+            commands::library_rescan,
             commands::tour_mark,
             login::account_login,
         ])

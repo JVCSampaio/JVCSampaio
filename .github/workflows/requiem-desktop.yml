@@ -113,8 +113,9 @@ jobs:
           if-no-files-found: error
 
   # Installs the .deb on a clean machine and lets the app walk its own screens (REQUIEM_TOUR):
-  # first run, search, a song downloaded and playing with lyrics, a video, library, settings.
-  # Add "[screenshots]" to a commit message to commit the pictures to requiem/docs/screenshots.
+  # first run, the songs already on the computer and one playing, search, a download, a video,
+  # library, settings. Add "[screenshots]" to a commit message to commit the pictures to
+  # requiem/docs/screenshots.
   tour:
     needs: desktop
     runs-on: ubuntu-22.04
@@ -132,14 +133,40 @@ jobs:
         working-directory: .
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb imagemagick pulseaudio dbus-x11 > /dev/null
+          sudo apt-get install -y -qq xvfb imagemagick pulseaudio dbus-x11 ffmpeg > /dev/null
           sudo apt-get install -y -qq ./deb/*.deb > /dev/null
+      # Songs already on the computer: tones tagged with public-domain titles and a cover, so the
+      # tour shows a filled library even when YouTube refuses the runner.
+      - name: Music folder
+        working-directory: .
+        run: |
+          album="$RUNNER_TEMP/Música/Clássicos de domínio público"
+          mkdir -p "$album"
+          i=0
+          while IFS='|' read -r title artist disc freq top; do
+            i=$((i + 1))
+            convert -size 600x600 "gradient:$top-#0b0612" -fill '#e9dcc5' -draw "circle 380,200 380,140" "$RUNNER_TEMP/capa-$i.jpg"
+            ffmpeg -nostdin -loglevel error -y -f lavfi -i "sine=frequency=$freq:duration=75" -i "$RUNNER_TEMP/capa-$i.jpg" \
+              -map 0:a -map 1:v -c:a libmp3lame -b:a 128k -c:v copy -id3v2_version 3 \
+              -metadata title="$title" -metadata artist="$artist" -metadata album="$disc" \
+              -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (front)" \
+              "$album/$(printf %02d "$i") - $artist - $title.mp3"
+          done <<'LIST'
+          Danse Macabre|Camille Saint-Saëns|Poemas Sinfônicos|220|#4a0f17
+          Lacrimosa|Wolfgang Amadeus Mozart|Réquiem em Ré Menor|262|#2a1240
+          Gymnopédie nº 1|Erik Satie|Gymnopédies|294|#0f2a33
+          Noturno em Mi Bemol|Frédéric Chopin|Noturnos|330|#1d1d2e
+          Na Gruta do Rei da Montanha|Edvard Grieg|Peer Gynt|349|#5a2a08
+          Tocata e Fuga em Ré Menor|Johann Sebastian Bach|Obras para Órgão|392|#2f2a1c
+          LIST
+          ls -la "$album"
       - name: Tour
         working-directory: .
         run: |
           mkdir -p tour
           pulseaudio --start --exit-idle-time=-1 || true
-          export REQUIEM_TOUR=1 REQUIEM_DATA_DIR="$RUNNER_TEMP/data" REQUIEM_LIBRARY_DIR="$RUNNER_TEMP/library"
+          export REQUIEM_TOUR=1 REQUIEM_DATA_DIR="$RUNNER_TEMP/data" REQUIEM_LIBRARY_DIR="$RUNNER_TEMP/library" \
+            REQUIEM_MUSIC_DIR="$RUNNER_TEMP/Música"
           timeout 1500 xvfb-run -a -s "-screen 0 1320x840x24" dbus-run-session -- bash -c '
             requiem 2>&1 | while IFS= read -r line; do
               echo "$line"
@@ -156,6 +183,7 @@ jobs:
         working-directory: .
         run: |
           mkdir -p requiem/docs/screenshots
+          rm -f requiem/docs/screenshots/*.jpg
           for f in tour/*.png; do
             [ -e "$f" ] && convert "$f" -quality 84 "requiem/docs/screenshots/$(basename "${f%.png}").jpg"
           done
@@ -172,7 +200,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add requiem/docs/screenshots
+          git add -A requiem/docs/screenshots
           git commit -m "Update Requiem screenshots from the desktop tour" || exit 0
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"

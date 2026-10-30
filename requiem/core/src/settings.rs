@@ -45,6 +45,9 @@ pub struct Settings {
     pub audio_format: AudioFormat,
     pub close_to_tray: bool,
     pub launch_at_login: bool,
+    /// Folders whose songs and videos join the library. None until the person changes the
+    /// list: the computer's Music folder.
+    pub music_folders: Option<Vec<String>>,
 }
 
 impl Default for Settings {
@@ -67,6 +70,7 @@ impl Default for Settings {
             audio_format: AudioFormat::M4a,
             close_to_tray: true,
             launch_at_login: false,
+            music_folders: None,
         }
     }
 }

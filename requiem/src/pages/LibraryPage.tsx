@@ -1,4 +1,4 @@
-import { Books, MagnifyingGlass, X } from "@phosphor-icons/react";
+import { Books, FolderOpen, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
 import { BackBar, Hero, PlayActions } from "@/components/library/Hero";
 import { Section, Shelf, VideoTile } from "@/components/library/Tiles";
@@ -67,6 +67,7 @@ const searchable = (i: Item) => `${i.title} ${i.artist} ${i.album ?? ""} ${i.cha
 export function LibraryPage({ tab }: { tab: LibraryTab }) {
   const items = useLibrary((s) => s.items);
   const settings = useLibrary((s) => s.settings);
+  const local = useLibrary((s) => s.local);
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<TrackSort>({ key: "added", dir: "desc" });
 
@@ -84,6 +85,15 @@ export function LibraryPage({ tab }: { tab: LibraryTab }) {
 
   if (!all.length) {
     const connected = isAccountConnected(settings);
+    if (local.running) {
+      return (
+        <div className="flex min-h-full items-center justify-center">
+          <EmptyState icon={<FolderOpen weight="duotone" />} title="Lendo o seu computador">
+            As músicas e os vídeos das suas pastas de música aparecem aqui em instantes.
+          </EmptyState>
+        </div>
+      );
+    }
     return (
       <div className="flex min-h-full items-center justify-center">
         <EmptyState
@@ -94,6 +104,9 @@ export function LibraryPage({ tab }: { tab: LibraryTab }) {
               <Button variant="primary" size="lg" onClick={() => go({ name: "search" })}>
                 Buscar uma música
               </Button>
+              <Button variant="ghost" size="lg" icon={<FolderOpen className="h-5 w-5" />} onClick={() => go({ name: "settings", section: "folders" })}>
+                Escolher pastas de música
+              </Button>
               {!connected && (
                 <Button variant="ghost" size="lg" onClick={() => go({ name: "settings", section: "account" })}>
                   Conectar o YouTube
@@ -102,7 +115,7 @@ export function LibraryPage({ tab }: { tab: LibraryTab }) {
             </>
           }
         >
-          Tudo o que você baixar aparece aqui, separado em músicas, vídeos, artistas e álbuns.
+          Aqui ficam as músicas que você baixa e as que já estão nas pastas de música do computador, separadas em músicas, vídeos, artistas e álbuns.
         </EmptyState>
       </div>
     );
@@ -118,6 +131,12 @@ export function LibraryPage({ tab }: { tab: LibraryTab }) {
   return (
     <div className="px-8 pb-12 pt-8">
       <h1 className="font-display text-5xl font-semibold text-foreground">Biblioteca</h1>
+      {local.running && (
+        <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground" aria-live="polite">
+          <FolderOpen className="h-4 w-4 animate-pulse text-primary" />
+          Lendo as pastas de música do computador
+        </p>
+      )}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
         <Segmented<LibraryTab>
           label="Mostrar"

@@ -50,6 +50,9 @@ export function itemMenu(item: Item, playlists: Playlist[], inPlaylist?: Playlis
       : []),
     { type: "item", label: "Mostrar no computador", icon: <FolderOpen />, onSelect: async () => (await backend()).itemReveal(item.id).catch((e) => toast(String(e), "error")) },
     { type: "separator" },
-    { type: "item", label: "Apagar do computador", icon: <Skull />, danger: true, onSelect: () => showDialog({ type: "delete", item }) },
+    // A song that was already on the computer leaves the library, never the disk.
+    item.source === "local"
+      ? { type: "item", label: "Tirar da biblioteca", icon: <MinusCircle />, danger: true, onSelect: () => showDialog({ type: "delete", item }) }
+      : { type: "item", label: "Apagar do computador", icon: <Skull />, danger: true, onSelect: () => showDialog({ type: "delete", item }) },
   ];
 }

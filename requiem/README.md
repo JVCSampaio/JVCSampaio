@@ -17,15 +17,19 @@ Windows, macOS e Linux. Feito em Rust ([Tauri 2](https://tauri.app)) com a inter
   MP3), o resto vira vídeo (até 1440p). Shorts, transmissões ao vivo e vídeos longos demais ficam
   de fora, e cada regra é ajustável. O que ficou de fora aparece em Downloads com "Baixar assim
   mesmo".
-- **Baixa qualquer música.** A busca procura no YouTube Music (ou no YouTube, em Vídeos). Também
-  aceita um link de vídeo ou de playlist colado: uma playlist inteira vira playlist no Requiem
-  com um clique.
+- **Baixa qualquer música.** A busca procura no YouTube e mostra artista e duração de cada
+  resultado; em Músicas, Shorts e mixes de uma hora vão para o fim. Também aceita um link de
+  vídeo ou de playlist colado: uma playlist inteira vira playlist no Requiem com um clique.
 - **Toca tudo offline.** Fila, aleatório, repetição, letras sincronizadas do
   [LRCLIB](https://lrclib.net), vídeos no painel ou em tela cheia, teclas de mídia do teclado,
   controles na bandeja do sistema, e continua de onde parou.
 - **Organiza sem pedir nada.** "Artista - Música (Official Video)" vira título e artista
   limpos. Quando o YouTube Music informa faixa, artista e álbum, a biblioteca usa esses dados e
   monta as páginas de artista e de álbum.
+- **Mostra o que já está no computador.** Lê a sua pasta Música (e as outras que você
+  escolher em Ajustes) e põe na biblioteca as músicas e os vídeos que já estão lá, com capa,
+  artista e álbum tirados das tags. Os arquivos ficam onde estão: tirar uma dessas músicas da
+  biblioteca nunca apaga o arquivo.
 - **Os arquivos são seus.** Ficam em `Música/Requiem` (ou na pasta que você escolher), em
   `Músicas` e `Vídeos`, com o nome "Artista - Título [id].m4a". Qualquer outro player abre.
 
@@ -94,7 +98,9 @@ O histórico do YouTube precisa estar ativado na sua conta.
 ```
 requiem/
   core/        motor em Rust, sem janela: banco SQLite, sincronização, fila de downloads,
-               yt-dlp, servidor local de mídia, letras. 70 testes.
+               yt-dlp, servidor local de mídia, letras, leitura das pastas de música.
+               76 testes, entre eles um que baixa com um yt-dlp de mentira e confere
+               que a música chega à biblioteca e toca.
   src-tauri/   a casca do app: janela, bandeja, comandos, login do YouTube.
   src/         a interface em React (Vite, Tailwind, Radix, Phosphor).
 ```

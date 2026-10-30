@@ -31,6 +31,11 @@ const seeds: Seed[] = [
   ["fantasia018", "music", "Fantasia Cromática", "Johann Sebastian Bach", "Obras para Teclado", 465, 40, 2],
   ["mangue00019", "music", "Maracatu da Lua Cheia", "Assombração do Recife", null, 236, 45, 0],
   ["vampira0020", "music", "Valsa da Vampira", "Assombração do Recife", null, 199, 50, 1],
+  ["local-0000000000000001", "music", "Prelúdio em Mi Menor", "Frédéric Chopin", "Prelúdios", 135, 30, 6],
+  ["local-0000000000000002", "music", "Clair de Lune", "Claude Debussy", "Suíte Bergamasque", 302, 31, 9],
+  ["local-0000000000000003", "music", "Pavana para uma Infanta Defunta", "Maurice Ravel", null, 389, 32, 2],
+  ["local-0000000000000004", "music", "Adagio para Cordas", "Samuel Barber", null, 476, 33, 4],
+  ["local-0000000000000005", "music", "Canção da Bruxa", "Noite Alta", "Lua Minguante", 228, 34, 1],
   ["vid00000001", "video", "Como restauramos um órgão de igreja de 1890", "Oficina de Tubos", null, 1412, 0.2, 2],
   ["vid00000002", "video", "Danse Macabre ao vivo na Sala São Paulo", "Orquestra Noturna", null, 512, 0.8, 4],
   ["vid00000003", "video", "Lendas urbanas do Rio de Janeiro", "Arquivo Assombrado", null, 1880, 2.2, 1],
@@ -38,6 +43,9 @@ const seeds: Seed[] = [
   ["vid00000005", "video", "A história do Dies Irae no cinema", "Trilha e Tela", null, 1105, 4.6, 3],
   ["vid00000006", "video", "Gravando sinos de verdade às 3 da manhã", "Campo Sonoro", null, 903, 7, 0],
 ];
+
+/** Songs the person already had on the computer, found in the Music folder. */
+const localIds = new Set(["nocturne008", "gymnope0011", "valsetr0012", "erlking0010", "fantasia018"]);
 
 function seedItem([id, kind, title, artist, album, duration, daysAgo, plays]: Seed, i: number): Item {
   const at = now - daysAgo * DAY;
@@ -49,7 +57,7 @@ function seedItem([id, kind, title, artist, album, duration, daysAgo, plays]: Se
     album,
     channel: artist,
     duration,
-    source: i % 4 === 3 ? "search" : i % 3 === 0 ? "liked" : "history",
+    source: id.startsWith("local-") || localIds.has(id) ? "local" : i % 4 === 3 ? "search" : i % 3 === 0 ? "liked" : "history",
     status: "done",
     error: null,
     filePath: `/Músicas/${artist} - ${title} [${id}].m4a`,
@@ -128,6 +136,7 @@ export function createMockBackend(): Backend {
     audioFormat: "m4a",
     closeToTray: true,
     launchAtLogin: false,
+    musicFolders: null,
   };
   let sync: SyncStatus = { running: false, lastRunAt: now - 12 * 60_000, lastFound: 3, lastError: null, nextRunAt: now + 18 * 60_000 };
   const tools: ToolsStatus = { ytdlp: "2026.10.18", deno: "2.5.4", ffmpeg: "6.1.1", ready: true };
@@ -224,7 +233,19 @@ export function createMockBackend(): Backend {
   };
 
   return {
-    overview: () => wait({ version: "0.1.0", mediaBase: "", dataDir: "/home/voce/.local/share/requiem", libraryDir: settings.libraryDir, platform: "linux" }, 50),
+    overview: () =>
+      wait(
+        {
+          version: "0.1.0",
+          mediaBase: "",
+          dataDir: "/home/voce/.local/share/requiem",
+          libraryDir: settings.libraryDir,
+          platform: "linux",
+          localFolders: settings.musicFolders ?? ["/home/voce/Música"],
+          local: { running: false, found: [...items.values()].filter((i) => i.source === "local").length },
+        },
+        50,
+      ),
     toolsStatus: () => wait({ status: tools, installing: false, step: null, error: null }, 50),
     toolsInstall: () => wait(undefined),
     toolsUpdate: () => wait(tools, 900),
@@ -323,6 +344,7 @@ export function createMockBackend(): Backend {
     settingsGet: () => wait(settings, 50),
     settingsSet: async (next) => {
       settings = next;
+      emit({ type: "settings", settings });
       return settings;
     },
     syncStatus: () => wait(sync, 50),
@@ -342,6 +364,11 @@ export function createMockBackend(): Backend {
     },
     lyrics: (id) => wait(id === "dmacabre001" || id === "lacrimosa06" ? lyrics : null, 400),
     openLibraryFolder: () => wait(undefined),
+    libraryRescan: async () => {
+      const found = [...items.values()].filter((i) => i.source === "local").length;
+      emit({ type: "local", running: true, found: 0 });
+      setTimeout(() => emit({ type: "local", running: false, found }), 1200);
+    },
     pickFolder: () => wait(null),
     pickCookieFile: () => wait(null),
     tourMark: () => wait(false, 0),

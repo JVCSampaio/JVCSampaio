@@ -96,23 +96,32 @@ export function DialogsHost() {
 
   if (open.type === "delete") {
     const { item } = open;
+    const local = item.source === "local";
     return (
-      <Dialog open onOpenChange={onOpenChange} title={`Apagar "${item.title}"?`} description="O arquivo sai do computador e a sincronização não baixa de novo. Dá para buscar e baixar outra vez quando quiser.">
+      <Dialog
+        open
+        onOpenChange={onOpenChange}
+        title={local ? `Tirar "${item.title}" da biblioteca?` : `Apagar "${item.title}"?`}
+        description={
+          local
+            ? "O arquivo continua na sua pasta. O Requiem para de mostrar ele, mesmo nas próximas leituras da pasta."
+            : "O arquivo sai do computador e a sincronização não baixa de novo. Dá para buscar e baixar outra vez quando quiser."
+        }
+      >
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={close}>
             Cancelar
           </Button>
           <Button
-            variant="secondary"
-            className="text-destructive"
+            variant="danger"
             disabled={busy}
             onClick={async () => {
               setBusy(true);
-              await (await backend()).itemDelete(item.id, true).catch((e) => toast(String(e), "error"));
+              await (await backend()).itemDelete(item.id, !local).catch((e) => toast(String(e), "error"));
               close();
             }}
           >
-            Apagar
+            {local ? "Tirar da biblioteca" : "Apagar"}
           </Button>
         </div>
       </Dialog>
@@ -128,8 +137,7 @@ export function DialogsHost() {
             Cancelar
           </Button>
           <Button
-            variant="secondary"
-            className="text-destructive"
+            variant="danger"
             onClick={async () => {
               await (await backend()).playlistDelete(playlist.id);
               close();

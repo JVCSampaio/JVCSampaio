@@ -1,4 +1,4 @@
-import { DownloadSimple, Ghost, MagnifyingGlass, Play } from "@phosphor-icons/react";
+import { DownloadSimple, FolderOpen, Ghost, MagnifyingGlass, Play } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import { Section, Shelf, SongTile, VideoTile } from "@/components/library/Tiles";
 import { Button } from "@/components/ui/Button";
@@ -12,11 +12,13 @@ import { coverUrl, playList, usePlayer } from "@/state/player";
 import { go } from "@/state/router";
 
 const fromYouTube = (i: Item) => i.source === "history" || i.source === "liked" || i.source === "liked_music";
+const onDisk = (i: Item) => i.source === "local";
 const bySeen = (a: Item, b: Item) => (b.seenAt ?? b.addedAt) - (a.seenAt ?? a.addedAt);
 
 export function HomePage() {
   const items = useLibrary((s) => s.items);
   const settings = useLibrary((s) => s.settings);
+  const reading = useLibrary((s) => s.local.running);
   const library = useMemo(() => libraryItems(items), [items]);
 
   const sections = useMemo(() => {
@@ -26,15 +28,16 @@ export function HomePage() {
       .slice(0, 6);
     const heardMusic = library.filter((i) => i.kind === "music" && fromYouTube(i)).sort(bySeen).slice(0, 14);
     const seenVideos = library.filter((i) => i.kind === "video" && fromYouTube(i)).sort(bySeen).slice(0, 10);
-    const chosen = library.filter((i) => !fromYouTube(i)).slice(0, 14);
+    const computer = library.filter(onDisk).slice(0, 14);
+    const chosen = library.filter((i) => !fromYouTube(i) && !onDisk(i)).slice(0, 14);
     const mostPlayed = library
       .filter((i) => i.playCount >= 2)
       .sort((a, b) => b.playCount - a.playCount)
       .slice(0, 8);
-    return { continueWith, heardMusic, seenVideos, chosen, mostPlayed };
+    return { continueWith, heardMusic, computer, seenVideos, chosen, mostPlayed };
   }, [library]);
 
-  if (!library.length) return <EmptyHome connected={isAccountConnected(settings)} />;
+  if (!library.length) return <EmptyHome connected={isAccountConnected(settings)} reading={reading} />;
 
   return (
     <div className="px-8 pb-12 pt-8">
@@ -56,6 +59,27 @@ export function HomePage() {
               {sections.heardMusic.map((item, i) => (
                 <SongTile key={item.id} item={item} row={sections.heardMusic} index={i} />
               ))}
+            </Shelf>
+          </Section>
+        )}
+
+        {sections.computer.length > 0 && (
+          <Section
+            title="No seu computador"
+            action={
+              <Button variant="ghost" size="sm" onClick={() => go({ name: "library" })}>
+                Ver a biblioteca
+              </Button>
+            }
+          >
+            <Shelf>
+              {sections.computer.map((item, i) =>
+                item.kind === "video" ? (
+                  <VideoTile key={item.id} item={item} row={sections.computer} index={i} />
+                ) : (
+                  <SongTile key={item.id} item={item} row={sections.computer} index={i} />
+                ),
+              )}
             </Shelf>
           </Section>
         )}
@@ -155,7 +179,21 @@ function DownloadStrip() {
   );
 }
 
-function EmptyHome({ connected }: { connected: boolean }) {
+function EmptyHome({ connected, reading }: { connected: boolean; reading: boolean }) {
+  const folders = (
+    <Button variant="ghost" size="lg" icon={<FolderOpen className="h-5 w-5" />} onClick={() => go({ name: "settings", section: "folders" })}>
+      Escolher pastas de música
+    </Button>
+  );
+  if (reading) {
+    return (
+      <div className="flex min-h-full items-center justify-center px-8">
+        <EmptyState icon={<FolderOpen weight="duotone" />} title="Lendo o seu computador">
+          As músicas e os vídeos que já estão nas suas pastas de música aparecem aqui em instantes.
+        </EmptyState>
+      </div>
+    );
+  }
   return (
     <div className="flex min-h-full items-center justify-center px-8">
       <EmptyState
@@ -163,9 +201,12 @@ function EmptyHome({ connected }: { connected: boolean }) {
         title="A cripta está vazia"
         actions={
           connected ? (
-            <Button variant="primary" size="lg" icon={<MagnifyingGlass weight="bold" className="h-5 w-5" />} onClick={() => go({ name: "search" })}>
-              Buscar uma música
-            </Button>
+            <>
+              <Button variant="primary" size="lg" icon={<MagnifyingGlass weight="bold" className="h-5 w-5" />} onClick={() => go({ name: "search" })}>
+                Buscar uma música
+              </Button>
+              {folders}
+            </>
           ) : (
             <>
               <Button variant="primary" size="lg" onClick={() => go({ name: "settings", section: "account" })}>
@@ -174,13 +215,14 @@ function EmptyHome({ connected }: { connected: boolean }) {
               <Button variant="ghost" size="lg" onClick={() => go({ name: "search" })}>
                 Buscar uma música
               </Button>
+              {folders}
             </>
           )
         }
       >
         {connected
-          ? "O que você ouvir no YouTube chega aqui sozinho a cada sincronização. Enquanto isso, busque qualquer música."
-          : "Conecte o YouTube e o Requiem guarda sozinho as músicas e os vídeos que você ouve. Ou busque qualquer música agora."}
+          ? "O que você ouvir no YouTube chega aqui sozinho a cada sincronização. As músicas que já estão no computador também aparecem, das pastas que você escolher."
+          : "Conecte o YouTube e o Requiem guarda sozinho o que você ouve. As músicas que já estão no computador aparecem aqui quando você escolhe as pastas."}
       </EmptyState>
     </div>
   );
