@@ -1,11 +1,13 @@
-import { ArrowClockwise, CaretDown, CheckCircle, FolderOpen, FolderPlus, FolderSimple, WarningCircle, X, YoutubeLogo } from "@phosphor-icons/react";
+import { ArrowClockwise, CaretDown, Check, CheckCircle, FolderOpen, FolderPlus, FolderSimple, WarningCircle, X, YoutubeLogo } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Segmented, Skeleton, Switch } from "@/components/ui/Controls";
+import { Segmented, Skeleton, Slider, Switch } from "@/components/ui/Controls";
 import { Dropdown } from "@/components/ui/Menu";
 import { backend } from "@/lib/backend";
 import { cn, count } from "@/lib/format";
-import type { AccountTest, Settings } from "@/lib/types";
+import { BAND_LABELS, PRESETS, preampFor } from "@/lib/eq";
+import type { AccountTest, AudioSettings, Settings } from "@/lib/types";
+import { setEq, useAudio } from "@/state/audio";
 import { useLibrary } from "@/state/library";
 import { toast } from "@/state/toasts";
 
@@ -164,9 +166,17 @@ export function SettingsPage({ section }: { section?: "account" | "folders" }) {
         </Row>
       </Group>
 
+      <Group title="Som">
+        <SoundSection settings={settings} set={set} />
+      </Group>
+
       <Group title="Reprodução">
+        <CrossfadeRow audio={settings.audio} put={(patch) => set({ audio: { ...settings.audio, ...patch } })} />
+        <Row title="Sem pausa entre faixas de um álbum" description="Discos ao vivo e óperas seguem de uma faixa para a outra como foram gravados." htmlFor="gapless">
+          <Switch id="gapless" checked={settings.audio.gapless} onChange={(v) => set({ audio: { ...settings.audio, gapless: v } })} />
+        </Row>
         <Row title="Tocar parecidas quando a fila acabar" description="Busca no YouTube músicas parecidas com a última que tocou e baixa duas por vez." htmlFor="autoplay">
-          <Switch id="autoplay" label="Tocar parecidas quando a fila acabar" checked={settings.autoplay} onChange={(v) => set({ autoplay: v })} />
+          <Switch id="autoplay" checked={settings.autoplay} onChange={(v) => set({ autoplay: v })} />
         </Row>
       </Group>
 
@@ -214,6 +224,114 @@ function Row({ title, description, htmlFor, children }: { title: string; descrip
       </div>
       <div className="shrink-0">{children}</div>
     </div>
+  );
+}
+
+type PutAudio = (patch: Partial<AudioSettings>) => void;
+
+/** Even volume and the equalizer. Without the Web Audio chain, the equalizer cannot work. */
+function SoundSection({ settings, set }: { settings: Settings; set: (patch: Partial<Settings>) => void }) {
+  const audio = settings.audio;
+  const plain = useAudio((s) => s.mode) === "plain";
+  const put: PutAudio = (patch) => set({ audio: { ...audio, ...patch } });
+  return (
+    <>
+      <Row title="Volume igual entre músicas" description="Mede cada música uma vez e ajusta o volume dela na hora de tocar. Os arquivos não mudam." htmlFor="normalize">
+        <Switch id="normalize" checked={audio.normalize} onChange={(v) => put({ normalize: v })} />
+      </Row>
+      {audio.normalize && (
+        <Row title="Igualar" description="Por álbum, as faixas de um disco guardam as diferenças entre si, do jeito que foram gravadas.">
+          <Segmented<AudioSettings["normalizeBy"]>
+            label="Igualar"
+            value={audio.normalizeBy}
+            onChange={(v) => put({ normalizeBy: v })}
+            options={[
+              { value: "track", label: "Cada música" },
+              { value: "album", label: "Cada álbum" },
+            ]}
+          />
+        </Row>
+      )}
+      <Row title="Equalizador" htmlFor="eq" description={plain ? "Neste computador o som toca sem a cadeia de áudio do Requiem, então o equalizador fica desligado." : undefined}>
+        <Switch id="eq" checked={audio.eqOn && !plain} disabled={plain} onChange={(v) => put({ eqOn: v })} />
+      </Row>
+      {audio.eqOn && !plain && <Equalizer audio={audio} put={put} />}
+    </>
+  );
+}
+
+/** Ten bands and a preamp. Moving a band is heard at once; it is saved when let go. */
+function Equalizer({ audio, put }: { audio: AudioSettings; put: PutAudio }) {
+  const [gains, setGains] = useState(audio.eqGains);
+  const [preamp, setPreamp] = useState(audio.eqPreamp);
+  useEffect(() => {
+    setGains(audio.eqGains);
+    setPreamp(audio.eqPreamp);
+  }, [audio.eqGains, audio.eqPreamp]);
+  useEffect(() => setEq(true, gains, preamp), [gains, preamp]);
+  const preset = PRESETS.find((p) => p.id === audio.eqPreset);
+
+  return (
+    <div className="pb-6 pt-1" data-equalizer>
+      <div className="flex items-center gap-3">
+        <Dropdown
+          align="start"
+          entries={PRESETS.map((p) => ({
+            type: "item",
+            label: p.label,
+            icon: p.id === audio.eqPreset ? <Check weight="bold" /> : <span className="h-4 w-4" />,
+            onSelect: () => put({ eqPreset: p.id, eqGains: p.gains, eqPreamp: preampFor(p.gains) }),
+          }))}
+          trigger={<Button icon={<CaretDown weight="bold" className="h-3.5 w-3.5" />}>{preset?.label ?? "Personalizado"}</Button>}
+        />
+        {audio.eqPreset !== "flat" && (
+          <Button variant="ghost" size="sm" onClick={() => put({ eqPreset: "flat", eqGains: PRESETS[0].gains, eqPreamp: 0 })}>
+            Voltar ao plano
+          </Button>
+        )}
+      </div>
+      <div className="mt-5 flex items-stretch gap-1 rounded-surface border border-border bg-card px-4 py-4">
+        <Band label="Pré" value={preamp} min={-12} max={6} onChange={setPreamp} onCommit={(v) => put({ eqPreamp: v, eqPreset: "custom" })} />
+        <span aria-hidden className="mx-2 w-px self-stretch bg-border" />
+        {BAND_LABELS.map((label, i) => (
+          <Band
+            key={label}
+            label={label}
+            value={gains[i]}
+            min={-12}
+            max={12}
+            onChange={(v) => setGains((g) => g.map((x, j) => (j === i ? v : x)))}
+            onCommit={(v) => put({ eqGains: gains.map((x, j) => (j === i ? v : x)), eqPreset: "custom" })}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Band({ label, value, min, max, onChange, onCommit }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void; onCommit: (v: number) => void }) {
+  const shown = `${value > 0 ? "+" : ""}${Math.round(value * 10) / 10}`;
+  return (
+    <div className="flex flex-1 flex-col items-center gap-2">
+      <span className="text-[12px] tabular-nums text-muted-foreground">{shown}</span>
+      <Slider vertical label={label === "Pré" ? "Pré-amplificação" : `${label} Hz`} valueText={`${shown} dB`} value={value} min={min} max={max} step={0.5} onChange={onChange} onCommit={onCommit} className="h-32" />
+      <span className="text-[12px] tabular-nums text-faint-foreground">{label}</span>
+    </div>
+  );
+}
+
+/** Seconds over which one song fades into the next; the slider is heard on the next change. */
+function CrossfadeRow({ audio, put }: { audio: AudioSettings; put: PutAudio }) {
+  const [seconds, setSeconds] = useState(audio.crossfadeSeconds);
+  useEffect(() => setSeconds(audio.crossfadeSeconds), [audio.crossfadeSeconds]);
+  const shown = seconds ? `${seconds} s` : "Desligada";
+  return (
+    <Row title="Transição entre músicas" description="A próxima música entra enquanto a atual sai, sem silêncio no meio.">
+      <div className="flex w-60 items-center gap-3">
+        <Slider label="Transição entre músicas" valueText={shown} value={seconds} min={0} max={12} step={1} onChange={setSeconds} onCommit={(v) => put({ crossfadeSeconds: v })} className="flex-1" />
+        <span className="w-20 text-right text-sm tabular-nums text-muted-foreground">{shown}</span>
+      </div>
+    </Row>
   );
 }
 

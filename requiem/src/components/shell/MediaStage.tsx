@@ -4,16 +4,18 @@ import { IconButton } from "@/components/ui/Button";
 import { Slider } from "@/components/ui/Controls";
 import { cn, duration } from "@/lib/format";
 import { useLibrary } from "@/state/library";
-import { media, seek, setCinema, toggle, usePlayer } from "@/state/player";
+import { useAudio } from "@/state/audio";
+import { seek, setCinema, toggle, usePlayer } from "@/state/player";
 import { useStage } from "@/state/stage";
 
 /**
- * Holds the single media element. It never moves in the DOM (moving it would stop playback);
- * the box around it is placed over the panel's slot, over the whole window in cinema mode, or
- * kept out of sight for songs.
+ * Holds the video element. It never moves in the DOM (moving it would stop playback); the box
+ * around it is placed over the panel's slot, over the whole window in cinema mode, or kept out
+ * of sight for songs. Songs play on audio elements that need no place on screen.
  */
 export function MediaStage() {
   const host = useRef<HTMLDivElement>(null);
+  const video = useAudio((s) => s.video);
   const slot = useStage((s) => s.slot);
   const cinema = usePlayer((s) => s.cinema);
   const panel = usePlayer((s) => s.panel);
@@ -22,9 +24,8 @@ export function MediaStage() {
 
   useEffect(() => {
     const el = host.current;
-    if (el && media.parentElement !== el) el.appendChild(media);
-    media.className = "h-full w-full bg-black object-contain";
-  }, []);
+    if (el && video.parentElement !== el) el.replaceChildren(video);
+  }, [video]);
 
   const isVideo = kind === "video";
   const inPanel = isVideo && !cinema && !!panel && !!slot;

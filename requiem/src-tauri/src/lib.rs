@@ -131,6 +131,7 @@ pub fn run() {
             commands::download,
             commands::download_many,
             commands::radio,
+            commands::loudness_soon,
             commands::download_retry,
             commands::download_cancel,
             commands::downloads_clear,
@@ -153,6 +154,7 @@ pub fn run() {
             commands::update_check,
             commands::update_open,
             commands::tour_mark,
+            commands::tour_log,
             login::account_login,
         ])
         .run(tauri::generate_context!())

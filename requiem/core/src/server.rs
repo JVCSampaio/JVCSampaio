@@ -34,7 +34,10 @@ pub async fn start(lookup: Lookup) -> Result<String> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
     let state = Arc::new(ServerState { token: token.clone(), lookup });
-    let app = Router::new().route("/{token}/{asset}/{id}", get(serve)).layer(CorsLayer::permissive()).with_state(state);
+    // The player reads the files through Web Audio, which needs CORS; a web view that treats
+    // 127.0.0.1 as a private network asks first, and the answer lets it in.
+    let cors = CorsLayer::permissive().allow_private_network(true);
+    let app = Router::new().route("/{token}/{asset}/{id}", get(serve)).layer(cors).with_state(state);
     tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, app).await {
             log::error!("media server stopped: {e}");
@@ -71,11 +74,15 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     async fn raw_get(base: &str, path: &str, range: Option<&str>) -> String {
+        let range = range.map(|r| format!("Range: {r}\r\n")).unwrap_or_default();
+        raw(base, "GET", path, &range).await
+    }
+
+    async fn raw(base: &str, method: &str, path: &str, headers: &str) -> String {
         let addr = base.trim_start_matches("http://").split('/').next().unwrap().to_string();
         let mut stream = tokio::net::TcpStream::connect(&addr).await.unwrap();
-        let range = range.map(|r| format!("Range: {r}\r\n")).unwrap_or_default();
         let req = format!(
-            "GET {path} HTTP/1.1\r\nHost: {addr}\r\nOrigin: http://tauri.localhost\r\n{range}Connection: close\r\n\r\n"
+            "{method} {path} HTTP/1.1\r\nHost: {addr}\r\nOrigin: http://tauri.localhost\r\n{headers}Connection: close\r\n\r\n"
         );
         stream.write_all(req.as_bytes()).await.unwrap();
         let mut out = Vec::new();
@@ -101,7 +108,14 @@ mod tests {
 
         let part = raw_get(&base, &format!("/{token_path}/m/abc"), Some("bytes=2-4")).await;
         assert!(part.starts_with("HTTP/1.1 206"), "{part}");
+        assert!(part.to_lowercase().contains("access-control-allow-origin: *"), "{part}");
         assert!(part.ends_with("234"), "{part}");
+
+        // The question a web view asks before reading from a private address.
+        let ask = "Access-Control-Request-Method: GET\r\nAccess-Control-Request-Headers: range\r\nAccess-Control-Request-Private-Network: true\r\n";
+        let preflight = raw(&base, "OPTIONS", &format!("/{token_path}/m/abc"), ask).await.to_lowercase();
+        assert!(preflight.starts_with("http/1.1 200"), "{preflight}");
+        assert!(preflight.contains("access-control-allow-private-network: true"), "{preflight}");
 
         let wrong_token = raw_get(&base, "/nope/m/abc", None).await;
         assert!(wrong_token.starts_with("HTTP/1.1 404"));

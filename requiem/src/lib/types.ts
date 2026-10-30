@@ -80,6 +80,24 @@ export type Account =
   | { mode: "browser"; browser: string }
   | { mode: "file" };
 
+/** How the player sounds; kept by the engine with the other settings. */
+export interface AudioSettings {
+  /** Even volume between songs, from each file's measured loudness. */
+  normalize: boolean;
+  /** "album" keeps the differences between the songs of an album. */
+  normalizeBy: "track" | "album";
+  eqOn: boolean;
+  /** A preset's id, or "custom". */
+  eqPreset: string;
+  /** Ten band gains in dB, 31 Hz to 16 kHz. */
+  eqGains: number[];
+  eqPreamp: number;
+  /** 0 plays songs one after the other. */
+  crossfadeSeconds: number;
+  /** Songs that follow each other on an album play with no gap. */
+  gapless: boolean;
+}
+
 export interface Settings {
   libraryDir: string;
   account: Account;
@@ -102,6 +120,7 @@ export interface Settings {
   musicFolders: string[] | null;
   /** When the queue runs out, similar songs keep playing. */
   autoplay: boolean;
+  audio: AudioSettings;
 }
 
 export interface Update {

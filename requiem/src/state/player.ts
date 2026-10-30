@@ -1,11 +1,15 @@
 import { create } from "zustand";
-import { backend } from "@/lib/backend";
-import type { Entry, Item, Kind } from "@/lib/types";
+import { backend, isTauri } from "@/lib/backend";
+import { key } from "@/lib/format";
+import { gainFor } from "@/lib/loudness";
+import type { Entry, Item, Kind, Settings } from "@/lib/types";
+import { chainState, decks, fadeTo, installAudio, level, rest, setEq, setFade, setMaster, setTrackGain, toPlain, useAudio, wake, type Deck } from "./audio";
 import { useLibrary } from "./library";
 import { toast } from "./toasts";
 
 export type Repeat = "off" | "all" | "one";
 export type Panel = "lyrics" | "queue" | null;
+export type Sleep = { at: number } | { endOfItem: true } | null;
 
 interface PlayerState {
   /** Item ids in play order. */
@@ -28,14 +32,11 @@ interface PlayerState {
   pending: { entry: Entry; kind: Kind } | null;
   /** The last item finished and nothing came after it. */
   ended: boolean;
+  /** Playback speed, 1 for normal. Pitch stays where it is. */
+  speed: number;
+  /** The sleep timer: pause at a time, or when the item playing ends. */
+  sleep: Sleep;
 }
-
-/** One media element for the whole app: a <video> plays audio files too, so songs and videos
- *  share the queue, the controls and the OS media keys. It never moves in the DOM. */
-export const media: HTMLVideoElement = document.createElement("video");
-media.preload = "auto";
-media.playsInline = true;
-media.setAttribute("aria-label", "Vídeo tocando agora");
 
 const STORAGE = "requiem.player.v1";
 
@@ -74,6 +75,8 @@ export const usePlayer = create<PlayerState>()(() => ({
   cinema: false,
   pending: null,
   ended: false,
+  speed: 1,
+  sleep: null,
 }));
 
 const set = usePlayer.setState;
@@ -106,6 +109,9 @@ export function onNewQueue(listener: () => void) {
   newQueueListeners.add(listener);
 }
 
+// The element of what plays now; the other decks are idle, preloaded or fading out.
+let active: Deck = decks.a;
+let fadingOut: Deck | null = null;
 let loadedId: string | null = null;
 let pendingSeek: number | null = null;
 let counted: string | null = null;
@@ -143,44 +149,126 @@ function startListening() {
   counted = null;
 }
 
+// Sound settings and normalization
+
+const QUIET: Settings["audio"] = {
+  normalize: true,
+  normalizeBy: "track",
+  eqOn: false,
+  eqPreset: "flat",
+  eqGains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  eqPreamp: 0,
+  crossfadeSeconds: 0,
+  gapless: true,
+};
+
+function sound(): Settings["audio"] {
+  return useLibrary.getState().settings?.audio ?? QUIET;
+}
+
+const sameAlbum = (a: Item, b: Item) => !!a.album && !!b.album && key(a.album) === key(b.album) && key(a.artist) === key(b.artist);
+
+/** The gain that evens this item out with the rest, in dB. */
+function normalization(item: Item): number {
+  const s = sound();
+  if (!s.normalize) return 0;
+  const album = s.normalizeBy === "album" && item.album ? Object.values(useLibrary.getState().items).filter((i) => i.status === "done" && sameAlbum(i, item)) : [];
+  return gainFor(item, s.normalizeBy, album);
+}
+
+/** Asks the engine to measure what is about to play, when it was not measured yet. */
+function measureSoon(ids: Array<string | null | undefined>) {
+  const wanted = ids.filter((id): id is string => !!id && !!itemById(id) && itemById(id)!.loudness == null);
+  if (wanted.length) void backend().then((api) => api.loudnessSoon(wanted).catch(() => {}));
+}
+
+// Loading and playing
+
+function deckFor(item: Item): Deck {
+  if (item.kind === "video") return decks.video;
+  if (decks.a.id === item.id) return decks.a;
+  if (decks.b.id === item.id) return decks.b;
+  // A song takes the audio deck that is not playing, so the one playing can fade out.
+  return active === decks.a ? decks.b : decks.a;
+}
+
+function silenceOthers(keep: Deck) {
+  for (const deck of Object.values(decks)) {
+    if (deck !== keep && !deck.el.paused) deck.el.pause();
+  }
+  fadingOut = null;
+}
+
+function pauseAll() {
+  cancelTransition();
+  for (const deck of Object.values(decks)) deck.el.pause();
+  fadingOut = null;
+}
+
+async function source(deck: Deck, item: Item) {
+  if (deck.id === item.id && deck.el.getAttribute("src")) return;
+  deck.id = item.id;
+  deck.el.src = mediaUrl(item.id) || (await mockSource(item));
+}
+
+async function mockSource(item: Item): Promise<string> {
+  const { previewWav } = await import("@/lib/silence");
+  return previewWav(Math.min(item.duration ?? 180, 600));
+}
+
 async function load(autoplay: boolean) {
+  cancelTransition();
   const id = currentId();
   const item = itemById(id);
   if (get().ended) set({ ended: false });
   if (!id || !item) {
-    media.removeAttribute("src");
-    media.load();
+    for (const deck of Object.values(decks)) {
+      deck.el.pause();
+      deck.el.removeAttribute("src");
+      deck.el.load();
+      deck.id = null;
+    }
     loadedId = null;
     set({ playing: false, position: 0, duration: 0 });
     return;
   }
-  if (loadedId !== id) {
-    if (loadedId) saveResume(loadedId, media.currentTime, media.duration || 0);
+  const deck = deckFor(item);
+  silenceOthers(deck);
+  if (loadedId !== id || active !== deck) {
+    if (loadedId && loadedId !== id) saveResume(loadedId, active.el.currentTime, active.el.duration || 0);
+    if (loadedId !== id) startListening();
     loadedId = id;
-    startListening();
+    active = deck;
     const saved = resumeAt.has(id) ? resumeAt.get(id) : item.resumeAt;
     if (pendingSeek == null && saved && (item.duration ?? 0) > LONG_ITEM) pendingSeek = saved;
-    const url = mediaUrl(id) || (await mockSource(item));
-    media.src = url;
-    set({ position: 0, duration: item.duration ?? 0, buffering: true });
+    const fresh = deck.id !== id;
+    await source(deck, item);
+    if (!fresh) {
+      // Still loaded from before (preloaded, or played a moment ago): start it over.
+      deck.el.currentTime = pendingSeek ?? 0;
+      pendingSeek = null;
+    }
+    deck.el.playbackRate = get().speed;
+    setTrackGain(deck, normalization(item));
+    setFade(deck, 1);
+    set({ position: deck.el.currentTime || 0, duration: item.duration ?? 0, buffering: fresh });
     updateSession(item);
+    measureSoon([id, get().queue[upcomingIndex() ?? -1]]);
   }
   if (autoplay) {
     try {
-      await media.play();
+      await wake();
+      await deck.el.play();
     } catch (e) {
       if ((e as DOMException)?.name !== "AbortError") set({ playing: false });
     }
   }
 }
 
-async function mockSource(item: Item): Promise<string> {
-  const { silentWav } = await import("@/lib/silence");
-  return silentWav(Math.min(item.duration ?? 180, 600));
-}
-
 /** Plays a list from one of its items, or from a random one ("Aleatório"). */
 export function playList(ids: string[], start: number | "random" = 0, options: { shuffle?: boolean } = {}) {
+  // Inside the click itself: some web views only let sound start from a person's gesture.
+  void wake();
   const playable = ids.filter((id) => itemById(id)?.status === "done");
   if (!playable.length) return;
   const shuffle = options.shuffle ?? get().shuffle;
@@ -215,7 +303,7 @@ export async function playEntry(entry: Entry, kind: Kind, source = "search") {
     return;
   }
   set({ pending: { entry, kind } });
-  media.pause();
+  pauseAll();
   try {
     const item = await (await backend()).download(entry, kind, source, "now");
     if (item.status === "done" && get().pending?.entry.id === entry.id) playItem(item.id);
@@ -233,19 +321,33 @@ export function dropPending() {
 export function toggle() {
   dropPending();
   if (!currentId()) return;
-  if (media.paused) {
+  if (active.el.paused) {
     if (loadedId !== currentId()) void load(true);
-    else void media.play().catch(() => {});
-  } else media.pause();
+    else void wake().then(() => active.el.play().catch(() => {}));
+  } else {
+    pauseAll();
+  }
+}
+
+/** The position the queue moves to when the item playing ends, if any. */
+function upcomingIndex(): number | null {
+  const { queue, index, repeat } = get();
+  if (repeat === "one" || !queue.length) return null;
+  if (index + 1 < queue.length) return index + 1;
+  if (repeat === "all" && queue.length > 1) return 0;
+  return null;
 }
 
 export function next(auto = false) {
-  if (!auto) dropPending();
+  if (!auto) {
+    dropPending();
+    void wake();
+  }
   const { queue, index, repeat } = get();
   if (!queue.length) return;
   if (auto && repeat === "one") {
-    media.currentTime = 0;
-    void media.play();
+    active.el.currentTime = 0;
+    void active.el.play();
     return;
   }
   if (index + 1 < queue.length) set({ index: index + 1 });
@@ -259,15 +361,16 @@ export function next(auto = false) {
 
 export function previous() {
   dropPending();
+  void wake();
   const { index, queue, repeat } = get();
-  if (media.currentTime > 3 || !queue.length) {
-    media.currentTime = 0;
+  if (active.el.currentTime > 3 || !queue.length) {
+    seek(0);
     return;
   }
   if (index > 0) set({ index: index - 1 });
   else if (repeat === "all") set({ index: queue.length - 1 });
   else {
-    media.currentTime = 0;
+    seek(0);
     return;
   }
   void load(true);
@@ -276,18 +379,23 @@ export function previous() {
 export function jump(index: number) {
   if (index < 0 || index >= get().queue.length) return;
   dropPending();
+  void wake();
   set({ index });
   void load(true);
 }
 
 export function seek(seconds: number) {
   if (!Number.isFinite(seconds)) return;
-  media.currentTime = Math.max(0, Math.min(seconds, media.duration || seconds));
-  set({ position: media.currentTime });
+  cancelTransition();
+  if (fadingOut) silenceOthers(active);
+  const el = active.el;
+  el.currentTime = Math.max(0, Math.min(seconds, el.duration || seconds));
+  set({ position: el.currentTime });
+  sessionPosition();
 }
 
 export function seekBy(delta: number) {
-  seek(media.currentTime + delta);
+  seek(active.el.currentTime + delta);
 }
 
 export function setVolume(volume: number) {
@@ -303,9 +411,40 @@ export function toggleMute() {
 
 function applyVolume() {
   const { volume, muted } = get();
-  // A squared curve sounds even to the ear across the slider.
-  media.volume = volume * volume;
-  media.muted = muted;
+  setMaster(volume, muted);
+}
+
+export function setSpeed(speed: number) {
+  set({ speed });
+  for (const deck of Object.values(decks)) deck.el.playbackRate = speed;
+}
+
+// The sleep timer
+
+let sleepTimer: number | undefined;
+
+/** Pauses after `minutes`, at the end of what plays ("end"), or never (null). */
+export function setSleep(choice: number | "end" | null) {
+  window.clearTimeout(sleepTimer);
+  if (choice === null) set({ sleep: null });
+  else if (choice === "end") set({ sleep: { endOfItem: true } });
+  else {
+    set({ sleep: { at: Date.now() + choice * 60_000 } });
+    sleepTimer = window.setTimeout(fallAsleep, choice * 60_000);
+  }
+}
+
+/** The sound fades out over a few seconds, then everything pauses. */
+function fallAsleep() {
+  window.clearTimeout(sleepTimer);
+  set({ sleep: null });
+  const deck = active;
+  if (deck.el.paused) return;
+  cancelTransition();
+  fadeTo(deck, deck.fadeLevel, 0, 8, () => {
+    pauseAll();
+    setFade(deck, 1);
+  });
 }
 
 export function toggleShuffle() {
@@ -386,89 +525,349 @@ function shuffled<T>(list: T[]): T[] {
   return a;
 }
 
+// Crossfade and gapless: the next song starts on the other audio deck before this one ends.
+
+/** Songs of one album that follow each other overlap by this much, so no silence slips in. */
+const GAPLESS_OVERLAP = 0.05;
+let transitionTimer: number | undefined;
+let scheduled = false;
+
+function cancelTransition() {
+  window.clearTimeout(transitionTimer);
+  scheduled = false;
+}
+
+/** How the item playing hands over to the next one: a fade of some seconds, a seamless join
+ *  within an album, or nothing special (the end event moves on). */
+function handover(current: Item, upcoming: Item): number | null {
+  if (current.kind !== "music" || upcoming.kind !== "music" || upcoming.id === current.id) return null;
+  const s = sound();
+  if (s.gapless && sameAlbum(current, upcoming)) return 0;
+  return s.crossfadeSeconds > 0 ? s.crossfadeSeconds : null;
+}
+
+function watchTransition(deck: Deck) {
+  if (scheduled || deck.name === "video" || deck.el.paused || "endOfItem" in (get().sleep ?? {})) return;
+  const total = deck.el.duration;
+  if (!Number.isFinite(total) || total <= 0) return;
+  const at = upcomingIndex();
+  const current = itemById(currentId());
+  const upcoming = at == null ? null : itemById(get().queue[at]);
+  if (!current || !upcoming) return;
+  const fade = handover(current, upcoming);
+  if (fade == null) return;
+  const remaining = (total - deck.el.currentTime) / (deck.el.playbackRate || 1);
+  const other = deck === decks.a ? decks.b : decks.a;
+  if (remaining < fade + 15 && other.id !== upcoming.id) void preload(other, upcoming);
+  const lead = fade > 0 ? fade : GAPLESS_OVERLAP;
+  if (remaining > lead + 0.6) return;
+  scheduled = true;
+  transitionTimer = window.setTimeout(() => void handOver(deck, at!, fade), Math.max(0, (remaining - lead) * 1000));
+}
+
+async function preload(deck: Deck, item: Item) {
+  if (deck === active) return;
+  deck.el.pause();
+  await source(deck, item);
+  deck.el.preload = "auto";
+  if (deck.el.readyState >= 1) deck.el.currentTime = 0;
+  setTrackGain(deck, normalization(item));
+  setFade(deck, 0);
+}
+
+async function handOver(from: Deck, at: number, fade: number) {
+  scheduled = false;
+  const upcoming = itemById(get().queue[at]);
+  if (from !== active || !upcoming || from.el.paused) return;
+  const to = from === decks.a ? decks.b : decks.a;
+  await source(to, upcoming);
+  if (to.el.readyState >= 1) to.el.currentTime = 0;
+  to.el.playbackRate = get().speed;
+  setTrackGain(to, normalization(upcoming));
+  setFade(to, 0);
+
+  // The queue moves one step; the old song keeps sounding while it fades out.
+  if (loadedId) saveResume(loadedId, from.el.currentTime, from.el.duration || 0);
+  startListening();
+  loadedId = upcoming.id;
+  active = to;
+  fadingOut = from;
+  set({ index: at, position: 0, duration: upcoming.duration ?? 0, ended: false });
+  updateSession(upcoming);
+  measureSoon([get().queue[upcomingIndex() ?? -1]]);
+
+  await wake();
+  void to.el.play().catch(() => {});
+  const seconds = fade > 0 ? fade : GAPLESS_OVERLAP;
+  fadeTo(to, 0, 1, fade > 0 ? seconds : 0.01);
+  fadeTo(from, 1, 0, seconds, () => {
+    if (fadingOut === from) {
+      from.el.pause();
+      fadingOut = null;
+    }
+    setFade(from, 1);
+  });
+}
+
+// The system's media controls (keyboard keys, the Windows volume panel, MPRIS on Linux)
+
 function updateSession(item: Item) {
   if (!("mediaSession" in navigator)) return;
   const cover = coverUrl(item);
   navigator.mediaSession.metadata = new MediaMetadata({
     title: item.title,
-    artist: item.artist,
+    artist: item.artist || item.channel,
     album: item.album ?? "",
-    artwork: cover ? [{ src: cover }] : [],
+    artwork: cover ? [96, 256, 512].map((size) => ({ src: cover, sizes: `${size}x${size}` })) : [],
   });
+}
+
+let lastSessionUpdate = 0;
+
+function sessionPosition() {
+  if (!("mediaSession" in navigator) || !navigator.mediaSession.setPositionState) return;
+  const el = active.el;
+  if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+  try {
+    navigator.mediaSession.setPositionState({ duration: el.duration, position: Math.min(el.currentTime, el.duration), playbackRate: el.playbackRate || 1 });
+  } catch {
+    // Some web views reject a position a moment before the duration is known.
+  }
+}
+
+// Web Audio check: the first song of the session must reach the chain with sound in it. A web
+// view that hands Web Audio only silence would leave the app mute, so the chain is given up.
+let verified = false;
+let silentFor = 0;
+let lastCheck = 0;
+
+function checkChain(deck: Deck) {
+  if (verified || useAudio.getState().mode !== "graph" || deck.el.paused) return;
+  const t = deck.el.currentTime;
+  const rms = level();
+  if (rms == null || t < 1) return;
+  if (rms > 0) {
+    verified = true;
+    return;
+  }
+  const step = t - lastCheck;
+  lastCheck = t;
+  if (step > 0 && step < 1.5) silentFor += step;
+  if (silentFor >= 6) toPlain("a cadeia de áudio só recebeu silêncio");
+}
+
+/** The other way a chain fails: the element says it plays but its time never moves, because
+ *  nothing pulls the sound through. Watched once a second until the chain is verified. */
+let stallWatch: number | undefined;
+function watchStall() {
+  window.clearInterval(stallWatch);
+  if (verified || useAudio.getState().mode !== "graph") return;
+  let last = active.el.currentTime;
+  let still = 0;
+  stallWatch = window.setInterval(() => {
+    const el = active.el;
+    if (verified || useAudio.getState().mode !== "graph" || el.paused) {
+      window.clearInterval(stallWatch);
+      return;
+    }
+    if (el.currentTime !== last || el.readyState < 3) {
+      last = el.currentTime;
+      still = 0;
+      return;
+    }
+    still += 1;
+    if (still >= 5) {
+      window.clearInterval(stallWatch);
+      toPlain("o som parou dentro da cadeia de áudio");
+    }
+  }, 1000);
+}
+
+/** A file the element refuses: when the media server answers but not to a cross-origin read,
+ *  the chain is what fails, so the app goes on without it and tries again. */
+let retried = false;
+async function recover(deck: Deck): Promise<boolean> {
+  if (retried || useAudio.getState().mode !== "graph" || !deck.id) return false;
+  const url = mediaUrl(deck.id);
+  if (!url) return false;
+  const corsWorks = await fetch(url, { headers: { Range: "bytes=0-1" } })
+    .then((r) => r.ok)
+    .catch(() => false);
+  if (corsWorks) return false;
+  retried = true;
+  toPlain("o servidor de mídia não aceitou leitura do Web Audio");
+  loadedId = null;
+  await load(true);
+  return true;
+}
+
+function onMediaEvent(deck: Deck, event: Event) {
+  if (deck !== active) return;
+  const el = deck.el;
+  switch (event.type) {
+    case "play":
+      set({ playing: true });
+      if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
+      watchStall();
+      break;
+    case "pause": {
+      set({ playing: false });
+      if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "paused";
+      reportHeard();
+      const id = currentId();
+      if (id) saveResume(id, el.currentTime, el.duration || 0);
+      rest();
+      break;
+    }
+    case "waiting":
+      set({ buffering: true });
+      break;
+    case "playing":
+    case "canplay":
+      set({ buffering: false });
+      break;
+    case "durationchange":
+      if (Number.isFinite(el.duration)) set({ duration: el.duration });
+      sessionPosition();
+      break;
+    case "ratechange":
+      sessionPosition();
+      break;
+    case "loadedmetadata":
+      if (pendingSeek != null) {
+        el.currentTime = pendingSeek;
+        pendingSeek = null;
+      }
+      break;
+    case "timeupdate":
+      onTime(deck);
+      break;
+    case "ended": {
+      const id = currentId();
+      if (id) saveResume(id, el.duration || 0, el.duration || 0);
+      reportHeard();
+      if (get().sleep && "endOfItem" in get().sleep!) {
+        setSleep(null);
+        set({ playing: false });
+        return;
+      }
+      next(true);
+      break;
+    }
+    case "error":
+      if (!el.getAttribute("src")) return;
+      void recover(deck).then((handled) => {
+        if (handled) return;
+        set({ playing: false, buffering: false });
+        const item = itemById(currentId());
+        toast(item ? `Não deu para tocar "${item.title}". O arquivo pode ter sido movido.` : "Não deu para tocar esse arquivo.", "error");
+      });
+      break;
+  }
+}
+
+function onTime(deck: Deck) {
+  const el = deck.el;
+  const position = el.currentTime;
+  set({ position });
+  const step = position - lastPosition;
+  if (!el.paused && step > 0 && step < 1.5 * (el.playbackRate || 1)) heard += step / (el.playbackRate || 1);
+  lastPosition = position;
+  const id = currentId();
+  const threshold = Math.min(30, (el.duration || 60) * 0.5);
+  if (id && counted !== id && position >= threshold) {
+    counted = id;
+    void backend()
+      .then((api) => api.itemPlayed(id))
+      .then((play) => {
+        if (currentId() === id) playId = play;
+      });
+  }
+  const now = Date.now();
+  if (playId != null && now - lastReport > 15_000) {
+    lastReport = now;
+    reportHeard();
+  }
+  if (id && now - lastResumeSave > 10_000) {
+    lastResumeSave = now;
+    saveResume(id, position, el.duration || 0);
+  }
+  if (now - lastSessionUpdate > 5_000) {
+    lastSessionUpdate = now;
+    sessionPosition();
+  }
+  const sleep = get().sleep;
+  if (sleep && "at" in sleep && now >= sleep.at) fallAsleep();
+  checkChain(deck);
+  watchTransition(deck);
+}
+
+function applySound(previous?: Settings["audio"]) {
+  const s = sound();
+  setEq(s.eqOn, s.eqGains, s.eqPreamp);
+  if (previous && previous.normalize === s.normalize && previous.normalizeBy === s.normalizeBy) return;
+  for (const deck of Object.values(decks)) {
+    const item = itemById(deck.id);
+    if (item) setTrackGain(deck, normalization(item), 0.5);
+  }
+}
+
+/** What the sound path is doing, for the CI tour and the preview's test scripts. */
+export function soundState() {
+  return {
+    mode: useAudio.getState().mode,
+    chain: chainState(),
+    reason: useAudio.getState().reason,
+    level: level(),
+    active: active.name,
+    decks: Object.values(decks).map((d) => ({
+      name: d.name,
+      id: d.id,
+      paused: d.el.paused,
+      time: d.el.currentTime,
+      volume: d.el.volume,
+      trackDb: d.trackDb,
+      fade: d.fadeLevel,
+    })),
+  };
+}
+
+export function seekFromEnd(seconds: number) {
+  seek((active.el.duration || 0) - seconds);
 }
 
 let installed = false;
 
-/** Wires the media element, OS media keys, tray actions and persistence. Call once. */
+/** Wires the media elements, OS media keys, tray actions and persistence. Call once. */
 export async function installPlayer() {
   if (installed) return;
   installed = true;
 
-  media.addEventListener("play", () => set({ playing: true }));
-  media.addEventListener("pause", () => {
-    set({ playing: false });
-    reportHeard();
-    const id = currentId();
-    if (id) saveResume(id, media.currentTime, media.duration || 0);
-  });
-  media.addEventListener("waiting", () => set({ buffering: true }));
-  media.addEventListener("playing", () => set({ buffering: false }));
-  media.addEventListener("canplay", () => set({ buffering: false }));
-  media.addEventListener("durationchange", () => {
-    if (Number.isFinite(media.duration)) set({ duration: media.duration });
-  });
-  media.addEventListener("loadedmetadata", () => {
-    if (pendingSeek != null) {
-      media.currentTime = pendingSeek;
-      pendingSeek = null;
-    }
-  });
-  media.addEventListener("timeupdate", () => {
-    const position = media.currentTime;
-    set({ position });
-    const step = position - lastPosition;
-    if (!media.paused && step > 0 && step < 1.5) heard += step;
-    lastPosition = position;
-    const id = currentId();
-    const threshold = Math.min(30, (media.duration || 60) * 0.5);
-    if (id && counted !== id && position >= threshold) {
-      counted = id;
-      void backend()
-        .then((api) => api.itemPlayed(id))
-        .then((play) => {
-          if (currentId() === id) playId = play;
-        });
-    }
-    const now = Date.now();
-    if (playId != null && now - lastReport > 15_000) {
-      lastReport = now;
-      reportHeard();
-    }
-    if (id && now - lastResumeSave > 10_000) {
-      lastResumeSave = now;
-      saveResume(id, position, media.duration || 0);
-    }
-  });
-  media.addEventListener("ended", () => {
-    const id = currentId();
-    if (id) saveResume(id, media.duration || 0, media.duration || 0);
-    reportHeard();
-    next(true);
-  });
-  media.addEventListener("error", () => {
-    if (!media.getAttribute("src")) return;
-    set({ playing: false, buffering: false });
-    const item = itemById(currentId());
-    toast(item ? `Não deu para tocar "${item.title}". O arquivo pode ter sido movido.` : "Não deu para tocar esse arquivo.", "error");
-  });
+  installAudio(onMediaEvent);
+  if (!isTauri) {
+    // The browser preview lets its test scripts look at the sound path.
+    Object.assign(window, { requiemSeekFromEnd: seekFromEnd, requiemSound: soundState });
+  }
 
   if ("mediaSession" in navigator) {
     const ms = navigator.mediaSession;
-    ms.setActionHandler("play", () => toggle());
-    ms.setActionHandler("pause", () => toggle());
-    ms.setActionHandler("nexttrack", () => next());
-    ms.setActionHandler("previoustrack", () => previous());
-    ms.setActionHandler("seekto", (d) => d.seekTime != null && seek(d.seekTime));
+    const actions: Array<[MediaSessionAction, MediaSessionActionHandler]> = [
+      ["play", () => active.el.paused && toggle()],
+      ["pause", () => !active.el.paused && toggle()],
+      ["stop", () => pauseAll()],
+      ["nexttrack", () => next()],
+      ["previoustrack", () => previous()],
+      ["seekto", (d) => d.seekTime != null && seek(d.seekTime)],
+      ["seekbackward", (d) => seekBy(-(d.seekOffset ?? 10))],
+      ["seekforward", (d) => seekBy(d.seekOffset ?? 10)],
+    ];
+    for (const [action, run] of actions) {
+      try {
+        ms.setActionHandler(action, run);
+      } catch {
+        // An action this web view does not know.
+      }
+    }
   }
 
   const api = await backend();
@@ -482,6 +881,7 @@ export async function installPlayer() {
   const known = (saved.queue ?? []).filter((id) => itemById(id)?.status === "done");
   set({ volume: saved.volume ?? 0.8, muted: saved.muted ?? false, shuffle: saved.shuffle ?? false, repeat: saved.repeat ?? "off" });
   applyVolume();
+  applySound();
   if (known.length) {
     const savedId = saved.queue?.[saved.index ?? 0];
     const index = Math.max(0, savedId ? known.indexOf(savedId) : 0);
@@ -504,10 +904,16 @@ export async function installPlayer() {
     }, 1000);
   });
 
-  // An item deleted from the library leaves the queue, and a song being prepared starts the
-  // moment its file lands.
+  // An item deleted from the library leaves the queue, a song being prepared starts the moment
+  // its file lands, and a loudness measured while its song plays moves the gain gently.
   useLibrary.subscribe((lib, prev) => {
+    if (lib.settings?.audio !== prev.settings?.audio) applySound(prev.settings?.audio);
     if (lib.items === prev.items) return;
+    for (const deck of Object.values(decks)) {
+      const now = deck.id ? lib.items[deck.id] : undefined;
+      const before = deck.id ? prev.items[deck.id] : undefined;
+      if (now && before && (now.loudness !== before.loudness || now.peak !== before.peak)) setTrackGain(deck, normalization(now), 2);
+    }
     const pending = get().pending;
     if (pending) {
       const item = lib.items[pending.entry.id];
@@ -524,7 +930,7 @@ export async function installPlayer() {
     const stillThere = keep.includes(current);
     set({ queue: keep, index: stillThere ? keep.indexOf(current) : Math.min(index, Math.max(0, keep.length - 1)) });
     if (!stillThere) {
-      media.pause();
+      pauseAll();
       void load(false);
     }
   });

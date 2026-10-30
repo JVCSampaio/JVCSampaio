@@ -1,5 +1,5 @@
 import { libraryItems, useLibrary } from "@/state/library";
-import { playItem, playList, usePlayer } from "@/state/player";
+import { playItem, playList, seekFromEnd, soundState, usePlayer } from "@/state/player";
 import { go } from "@/state/router";
 import type { Backend } from "./backend";
 
@@ -51,6 +51,7 @@ export async function runTour(api: Backend) {
     usePlayer.setState({ panel: "lyrics" });
     await pause(5000);
     await mark("03-playing-from-disk");
+    await soundReport(api, onDisk.length > 1);
   }
 
   await until(() => !!state().tools.status?.ready && !state().tools.installing, 6 * 60_000);
@@ -94,6 +95,13 @@ export async function runTour(api: Backend) {
     await mark("07-video");
   }
 
+  // The engine measured the songs on disk once the tools were in: the workflow compares these
+  // with its own FFmpeg.
+  await until(() => libraryItems(state().items).filter((i) => i.source === "local").every((i) => i.loudness != null), 60_000);
+  for (const item of libraryItems(state().items).filter((i) => i.source === "local")) {
+    await api.tourLog(`loudness: ${item.title} = ${item.loudness?.toFixed(1) ?? "none"} LUFS, peak ${item.peak?.toFixed(1) ?? "none"} dBFS`);
+  }
+
   go({ name: "home" });
   await mark("08-home");
   go({ name: "library" });
@@ -105,4 +113,30 @@ export async function runTour(api: Backend) {
   go({ name: "settings" });
   await mark("12-settings");
   await api.tourMark("done");
+}
+
+/** The sound path in the real web view: the chain's state and level while a song plays, the
+ *  system's media controls (the workflow reads MPRIS when it sees the mark), and a crossfade
+ *  between two songs measured as the time both sound together. */
+async function soundReport(api: Backend, crossfade: boolean) {
+  const now = soundState();
+  await api.tourLog(
+    `sound: mode=${now.mode} chain=${now.chain ?? "none"} level=${now.level?.toFixed(4) ?? "none"} active=${now.active}${now.reason ? ` reason=${now.reason}` : ""}`,
+  );
+  await api.tourMark("mpris");
+  if (!crossfade) return;
+  const save = useLibrary.getState().saveSettings;
+  const before = useLibrary.getState().settings;
+  if (!before) return;
+  await save({ ...before, audio: { ...before.audio, crossfadeSeconds: 4 } });
+  seekFromEnd(7);
+  let both = 0;
+  for (let i = 0; i < 32; i++) {
+    await pause(250);
+    const playing = soundState().decks.filter((d) => d.name !== "video" && !d.paused).length;
+    if (playing === 2) both += 0.25;
+  }
+  const after = soundState();
+  await api.tourLog(`crossfade: both songs sounded for ${both.toFixed(2)} s of a 4 s fade, mode=${after.mode}, now on deck ${after.active}`);
+  await save({ ...useLibrary.getState().settings!, audio: { ...before.audio } });
 }

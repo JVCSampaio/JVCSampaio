@@ -7,6 +7,7 @@ pub mod db;
 pub mod engine;
 pub mod links;
 pub mod local;
+pub mod loudness;
 pub mod lyrics;
 pub mod media;
 pub mod process;

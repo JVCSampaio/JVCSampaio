@@ -181,6 +181,16 @@ export function createMockBackend(): Backend {
     launchAtLogin: false,
     musicFolders: null,
     autoplay: true,
+    audio: {
+      normalize: true,
+      normalizeBy: "track",
+      eqOn: false,
+      eqPreset: "flat",
+      eqGains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      eqPreamp: 0,
+      crossfadeSeconds: 0,
+      gapless: true,
+    },
   };
   let sync: SyncStatus = { running: false, lastRunAt: now - 12 * 60_000, lastFound: 3, lastError: null, nextRunAt: now + 18 * 60_000 };
   const tools: ToolsStatus = { ytdlp: "2026.10.18", deno: "2.5.4", ffmpeg: "6.1.1", ready: true };
@@ -402,6 +412,18 @@ export function createMockBackend(): Backend {
       emit({ type: "item", item: { ...it } });
       return { ...it };
     },
+    loudnessSoon: async (ids) => {
+      // The engine measures with FFmpeg; here a made-up loudness arrives a moment later.
+      for (const id of ids) {
+        const it = items.get(id);
+        if (!it || it.loudness != null) continue;
+        setTimeout(() => {
+          it.loudness = -8 - (it.title.length % 9);
+          it.peak = -0.3;
+          emit({ type: "item", item: { ...it } });
+        }, 900);
+      }
+    },
     radio: async (_seed, played) => {
       await wait(null, 1200);
       if (new URLSearchParams(location.search).get("radio") === "fail") {
@@ -510,6 +532,7 @@ export function createMockBackend(): Backend {
     pickFolder: () => wait(null),
     pickCookieFile: () => wait(null),
     tourMark: () => wait(false, 0),
+    tourLog: async () => {},
     onEvent: (handler) => {
       listeners.add(handler);
       return () => listeners.delete(handler);

@@ -15,6 +15,28 @@ pub fn command(program: impl AsRef<OsStr>) -> Command {
     cmd
 }
 
+/// A command that yields the processor to everything else: below normal priority on Windows,
+/// through `nice` elsewhere when it exists. For background work such as measuring loudness.
+pub fn low_priority(program: impl AsRef<OsStr>) -> Command {
+    #[cfg(windows)]
+    {
+        const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        let mut cmd = command(program);
+        cmd.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
+        cmd
+    }
+    #[cfg(not(windows))]
+    match which("nice") {
+        Some(nice) => {
+            let mut cmd = command(nice);
+            cmd.args(["-n", "10"]).arg(program);
+            cmd
+        }
+        None => command(program),
+    }
+}
+
 pub fn exe_name(base: &str) -> String {
     if cfg!(windows) {
         format!("{base}.exe")

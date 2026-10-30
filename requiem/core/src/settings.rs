@@ -24,6 +24,68 @@ pub enum AudioFormat {
     Mp3,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum NormalizeBy {
+    /// Every song at the same loudness.
+    #[default]
+    Track,
+    /// An album keeps the differences between its songs (a quiet intro stays quiet).
+    Album,
+}
+
+/// How the player sounds. Kept here, with everything else, so it survives anything that clears
+/// the web view's storage.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AudioSettings {
+    /// Even volume between songs, from each file's measured loudness.
+    pub normalize: bool,
+    pub normalize_by: NormalizeBy,
+    pub eq_on: bool,
+    /// A preset's id, or "custom" once the bands are moved by hand.
+    pub eq_preset: String,
+    /// Gains of the ten bands, 31 Hz to 16 kHz, in dB.
+    pub eq_gains: Vec<f32>,
+    pub eq_preamp: f32,
+    /// Seconds over which one song fades into the next; 0 plays them one after the other.
+    pub crossfade_seconds: u32,
+    /// Songs that follow each other on an album play with no gap.
+    pub gapless: bool,
+}
+
+pub const EQ_BANDS: usize = 10;
+
+impl Default for AudioSettings {
+    fn default() -> Self {
+        AudioSettings {
+            normalize: true,
+            normalize_by: NormalizeBy::Track,
+            eq_on: false,
+            eq_preset: "flat".into(),
+            eq_gains: vec![0.0; EQ_BANDS],
+            eq_preamp: 0.0,
+            crossfade_seconds: 0,
+            gapless: true,
+        }
+    }
+}
+
+impl AudioSettings {
+    fn sanitized(mut self) -> AudioSettings {
+        self.eq_gains.resize(EQ_BANDS, 0.0);
+        for gain in &mut self.eq_gains {
+            *gain = if gain.is_finite() { gain.clamp(-12.0, 12.0) } else { 0.0 };
+        }
+        self.eq_preamp = if self.eq_preamp.is_finite() { self.eq_preamp.clamp(-12.0, 6.0) } else { 0.0 };
+        self.crossfade_seconds = self.crossfade_seconds.min(12);
+        if self.eq_preset.is_empty() || self.eq_preset.len() > 32 {
+            self.eq_preset = "custom".into();
+        }
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Settings {
@@ -50,6 +112,7 @@ pub struct Settings {
     pub music_folders: Option<Vec<String>>,
     /// When the queue runs out, similar songs keep playing.
     pub autoplay: bool,
+    pub audio: AudioSettings,
 }
 
 impl Default for Settings {
@@ -74,6 +137,7 @@ impl Default for Settings {
             launch_at_login: false,
             music_folders: None,
             autoplay: true,
+            audio: AudioSettings::default(),
         }
     }
 }
@@ -93,6 +157,7 @@ impl Settings {
                 self.account = Account::None;
             }
         }
+        self.audio = self.audio.sanitized();
         self
     }
 }
@@ -111,6 +176,18 @@ mod tests {
         assert!(!s.auto_sync);
         assert_eq!(s.sync_interval_minutes, 30);
         assert_eq!(s.account, Account::None);
+    }
+
+    #[test]
+    fn audio_settings_get_defaults_and_stay_in_range() {
+        let s: Settings =
+            serde_json::from_str(r#"{"audio": {"eqGains": [3, 40, -99], "crossfadeSeconds": 60}}"#).unwrap();
+        let audio = s.sanitized().audio;
+        assert!(audio.normalize && audio.gapless);
+        assert_eq!(audio.eq_gains, vec![3.0, 12.0, -12.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(audio.crossfade_seconds, 12);
+        let json = serde_json::to_string(&Settings::default()).unwrap();
+        assert!(json.contains(r#""normalizeBy":"track""#), "{json}");
     }
 
     #[test]

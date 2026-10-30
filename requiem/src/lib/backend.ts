@@ -45,6 +45,8 @@ export interface Backend {
   downloadMany(entries: Entry[], kind: Kind, playlist: string | null): Promise<number | null>;
   /** Songs like `seed` for a radio, leaving out the ones it already played. */
   radio(seed: string, played: string[]): Promise<Entry[]>;
+  /** Measures the loudness of these items before the rest of the library. */
+  loudnessSoon(ids: string[]): Promise<void>;
   downloadRetry(id: string): Promise<void>;
   downloadCancel(id: string): Promise<void>;
   downloadsClear(): Promise<number>;
@@ -70,6 +72,8 @@ export interface Backend {
   pickFolder(current: string): Promise<string | null>;
   pickCookieFile(): Promise<string | null>;
   tourMark(name: string): Promise<boolean>;
+  /** A measurement for the CI tour's summary. */
+  tourLog(text: string): Promise<void>;
   onEvent(handler: (event: EngineEvent) => void): () => void;
   onTray(handler: (action: string) => void): () => void;
   setFullscreen(on: boolean): Promise<void>;
@@ -118,6 +122,7 @@ async function tauriBackend(): Promise<Backend> {
     download: (entry, kind, source, priority) => invoke("download", { entry, kind, source: source ?? null, priority: priority ?? null }),
     downloadMany: (entries, kind, playlist) => invoke("download_many", { entries, kind, playlist }),
     radio: (seed, played) => invoke("radio", { seed, played }),
+    loudnessSoon: (ids) => invoke("loudness_soon", { ids }),
     downloadRetry: (id) => invoke("download_retry", { id }),
     downloadCancel: (id) => invoke("download_cancel", { id }),
     downloadsClear: () => invoke("downloads_clear"),
@@ -149,6 +154,7 @@ async function tauriBackend(): Promise<Backend> {
       return typeof picked === "string" ? picked : null;
     },
     tourMark: (name) => invoke("tour_mark", { name }),
+    tourLog: (text) => invoke("tour_log", { text }),
     onEvent: (handler) => on<EngineEvent>("engine", handler),
     onTray: (handler) => on<string>("tray", handler),
     setFullscreen: (on) => getCurrentWindow().setFullscreen(on),

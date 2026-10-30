@@ -148,6 +148,12 @@ pub fn download(
     state.engine.request(&entry, k, source.as_deref().unwrap_or("search"), level).map_err(msg)
 }
 
+/// Measures the loudness of these items before the rest of the library.
+#[tauri::command]
+pub fn loudness_soon(state: State<'_, AppState>, ids: Vec<String>) {
+    state.engine.loudness_soon(&ids);
+}
+
 /// Songs like `seed` for a radio, leaving out the ones it already played.
 #[tauri::command]
 pub async fn radio(state: State<'_, AppState>, seed: String, played: Vec<String>) -> Res<Vec<Entry>> {
@@ -287,6 +293,14 @@ pub async fn update_check(state: State<'_, AppState>) -> Res<Option<Update>> {
 #[tauri::command]
 pub fn update_open(app: AppHandle) -> Res<()> {
     app.opener().open_url(update::RELEASE_PAGE, None::<&str>).map_err(msg)
+}
+
+/// A measurement from the tour, for the workflow's summary.
+#[tauri::command]
+pub fn tour_log(text: String) {
+    if std::env::var_os("REQUIEM_TOUR").is_some() {
+        println!("TOUR log: {}", text.replace('\n', " "));
+    }
 }
 
 /// The CI screenshot tour: the interface walks its screens and prints a mark at each one, and

@@ -14,6 +14,7 @@ use crate::cookies::{self, CookieRecord};
 use crate::db::{now_ms, priority, Db, Finished, Item, NewItem, Play, Playlist, Stats};
 use crate::links::{self, Pasted};
 use crate::local;
+use crate::loudness;
 use crate::lyrics::{self, Cached, Lyrics};
 use crate::media::{self, Decision, Entry, Kind, Rules};
 use crate::radio;
@@ -168,6 +169,9 @@ pub struct Engine {
     local: Mutex<LocalStatus>,
     update: Mutex<Option<Update>>,
     media_base: RwLock<String>,
+    wake_loudness: Notify,
+    /// Items the player is about to play, measured before the rest.
+    loudness_wanted: Mutex<Vec<String>>,
 }
 
 impl Engine {
@@ -210,6 +214,8 @@ impl Engine {
             local: Mutex::new(LocalStatus::default()),
             update: Mutex::new(None),
             media_base: RwLock::new(String::new()),
+            wake_loudness: Notify::new(),
+            loudness_wanted: Mutex::new(Vec::new()),
         });
 
         let lookup_engine = Arc::downgrade(&engine);
@@ -238,6 +244,8 @@ impl Engine {
         tokio::spawn(async move { reader.scan_loop().await });
         let updater = engine.clone();
         tokio::spawn(async move { updater.update_loop().await });
+        let measurer = engine.clone();
+        tokio::spawn(async move { measurer.loudness_loop().await });
         Ok(engine)
     }
 
@@ -354,6 +362,7 @@ impl Engine {
         self.report_tools(ToolsReport { status, installing: false, step: None, error });
         self.wake_downloads.notify_waiters();
         self.wake_sync.notify_waiters();
+        self.wake_loudness.notify_waiters();
     }
 
     async fn daily_ytdlp_update(&self) {
@@ -440,7 +449,65 @@ impl Engine {
     async fn scan_loop(self: Arc<Self>) {
         loop {
             self.scan_local().await;
+            self.wake_loudness.notify_waiters();
             self.wake_scan.notified().await;
+        }
+    }
+
+    // Loudness
+
+    /// Measures the loudness of these items before the rest of the library: the player asks
+    /// for the songs it is about to play.
+    pub fn loudness_soon(&self, ids: &[String]) {
+        {
+            let mut wanted = self.loudness_wanted.lock().unwrap();
+            wanted.retain(|id| !ids.contains(id));
+            wanted.splice(0..0, ids.iter().cloned());
+            wanted.truncate(50);
+        }
+        self.wake_loudness.notify_waiters();
+    }
+
+    /// Reads the loudness of every file once, one at a time at low priority, and tells the
+    /// player as each one is known.
+    async fn loudness_loop(self: Arc<Self>) {
+        loop {
+            let notified = self.wake_loudness.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            let Some(ffmpeg) = self.tools.paths().ffmpeg else {
+                let _ = tokio::time::timeout(Duration::from_secs(600), notified).await;
+                continue;
+            };
+            let next = {
+                let mut wanted = self.loudness_wanted.lock().unwrap();
+                self.db.next_to_measure(&mut wanted)
+            };
+            match next {
+                Ok(Some((id, path))) => {
+                    let (measured, source) = match loudness::read(&ffmpeg, Path::new(&path)).await {
+                        Ok((Some(m), source)) => (Some((m.loudness, m.peak)), source),
+                        Ok((None, _)) => (None, "none"),
+                        Err(e) => {
+                            log::info!("loudness of {id}: {e:#}");
+                            (None, "error")
+                        }
+                    };
+                    if let Err(e) = self.db.set_loudness(&id, measured, source) {
+                        log::warn!("saving the loudness of {id}: {e:#}");
+                        tokio::time::sleep(Duration::from_secs(30)).await;
+                    }
+                    self.loudness_wanted.lock().unwrap().retain(|w| *w != id);
+                    self.emit_item(&id);
+                }
+                Ok(None) => {
+                    let _ = tokio::time::timeout(Duration::from_secs(600), notified).await;
+                }
+                Err(e) => {
+                    log::warn!("loudness queue: {e:#}");
+                    tokio::time::sleep(Duration::from_secs(30)).await;
+                }
+            }
         }
     }
 
@@ -1000,7 +1067,12 @@ impl Engine {
             }
         }
         match self.db.get(&id) {
-            Ok(Some(item)) if item.status != "removed" => self.emit(Event::Item { item: Box::new(item) }),
+            Ok(Some(item)) if item.status != "removed" => {
+                if item.status == "done" {
+                    self.wake_loudness.notify_waiters();
+                }
+                self.emit(Event::Item { item: Box::new(item) })
+            }
             _ => self.emit(Event::Removed { id }),
         }
     }

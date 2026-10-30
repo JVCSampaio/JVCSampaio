@@ -136,7 +136,7 @@ jobs:
         working-directory: .
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb imagemagick pulseaudio dbus-x11 ffmpeg > /dev/null
+          sudo apt-get install -y -qq xvfb imagemagick pulseaudio dbus-x11 ffmpeg libglib2.0-bin > /dev/null
           sudo apt-get install -y -qq ./deb/*.deb > /dev/null
       # Songs already on the computer: tones tagged with public-domain titles and a cover, so the
       # tour shows a filled library even when YouTube refuses the runner.
@@ -163,6 +163,13 @@ jobs:
           Tocata e Fuga em Ré Menor|Johann Sebastian Bach|Obras para Órgão|392|#2f2a1c
           LIST
           ls -la "$album"
+          # What the workflow's own FFmpeg measures, to compare with the app's measurement.
+          for f in "$album"/*.mp3; do
+            lufs=$(ffmpeg -nostdin -hide_banner -nostats -i "$f" -map 0:a:0 -af ebur128=framelog=verbose -f null - 2>&1 \
+              | grep -E "^ +I:" | tail -1 | awk '{print $2}')
+            echo "reference: $(basename "$f") = $lufs LUFS" >> "$RUNNER_TEMP/reference.txt"
+          done
+          cat "$RUNNER_TEMP/reference.txt"
       - name: Tour
         working-directory: .
         run: |
@@ -176,11 +183,33 @@ jobs:
               case "$line" in
                 "TOUR done") pkill -x requiem; break ;;
                 "TOUR start") ;;
+                "TOUR log: "*) echo "${line#TOUR log: }" >> tour/values.txt ;;
+                "TOUR mpris")
+                  player=$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+                    --method org.freedesktop.DBus.ListNames | grep -o "org\.mpris\.MediaPlayer2\.[A-Za-z0-9_.-]*" | head -1)
+                  if [ -n "$player" ]; then
+                    title=$(gdbus call --session --dest "$player" --object-path /org/mpris/MediaPlayer2 \
+                      --method org.freedesktop.DBus.Properties.Get org.mpris.MediaPlayer2.Player Metadata | grep -o "xesam:title[^>]*>" | head -1)
+                    echo "mpris: $player $title" >> tour/values.txt
+                  else
+                    echo "mpris: no player on the session bus" >> tour/values.txt
+                  fi ;;
                 TOUR\ *) import -window root "tour/${line#TOUR }.png" ;;
               esac
             done' || true
           ls -la tour
           test -n "$(ls tour/*.png 2>/dev/null)"
+      - name: Sound report
+        if: always()
+        working-directory: .
+        run: |
+          {
+            echo "### Sound in the real app"
+            echo '```'
+            cat tour/values.txt 2>/dev/null || echo "no values from the tour"
+            cat "$RUNNER_TEMP/reference.txt" 2>/dev/null || true
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Shrink screenshots
         if: always()
         working-directory: .

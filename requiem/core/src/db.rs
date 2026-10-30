@@ -467,6 +467,45 @@ impl Db {
         Ok(())
     }
 
+    /// The next file whose loudness was never read: one the player asked for (`wanted`, which
+    /// loses the ids that need nothing), else songs before videos, the recently played first,
+    /// then the newest.
+    pub fn next_to_measure(&self, wanted: &mut Vec<String>) -> Result<Option<(String, String)>> {
+        let conn = self.lock();
+        const OPEN: &str = "status = 'done' AND file_path IS NOT NULL AND analyzed_at IS NULL";
+        let mut ask = conn.prepare(&format!("SELECT file_path FROM items WHERE id = ?1 AND {OPEN}"))?;
+        while let Some(id) = wanted.first().cloned() {
+            let path: Option<String> = ask.query_row([&id], |r| r.get(0)).optional()?;
+            match path {
+                Some(path) => return Ok(Some((id, path))),
+                None => {
+                    wanted.remove(0);
+                }
+            }
+        }
+        Ok(conn
+            .query_row(
+                &format!(
+                    "SELECT id, file_path FROM items WHERE {OPEN}
+                     ORDER BY kind = 'video', last_played_at IS NULL, last_played_at DESC, downloaded_at DESC LIMIT 1"
+                ),
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?)
+    }
+
+    /// Records a measurement. `source` says where it came from ("ebur128", "replaygain"), or
+    /// why there is none ("none" for silence, "error"), so the file is not read again.
+    pub fn set_loudness(&self, id: &str, measured: Option<(f64, Option<f64>)>, source: &str) -> Result<()> {
+        let (loudness, peak) = measured.map_or((None, None), |(l, p)| (Some(l), p));
+        self.lock().execute(
+            "UPDATE items SET loudness = ?2, peak = ?3, loudness_source = ?4, analyzed_at = ?5 WHERE id = ?1",
+            params![id, loudness, peak, source, now_ms()],
+        )?;
+        Ok(())
+    }
+
     /// Of these ids, the ones the person removed or that failed to download: a radio leaves
     /// them out.
     pub fn blocked(&self, ids: &[String]) -> Result<HashSet<String>> {
@@ -1043,6 +1082,36 @@ mod tests {
         assert_eq!(db.playlists().unwrap()[0].item_ids, vec!["p0000000001", "p0000000003", "p0000000002"]);
         db.remove("p0000000002").unwrap();
         assert_eq!(db.playlists().unwrap()[0].item_ids.len(), 2);
+    }
+
+    #[test]
+    fn loudness_is_read_once_asked_first_songs_before_videos() {
+        let db = Db::in_memory().unwrap();
+        done(&db, "aaaaaaaaaaa", "A");
+        done(&db, "bbbbbbbbbbb", "B");
+        db.set_kind("bbbbbbbbbbb", "video").unwrap();
+        done(&db, "ccccccccccc", "C");
+        db.lock().execute("UPDATE items SET last_played_at = 5 WHERE id = 'aaaaaaaaaaa'", []).unwrap();
+
+        let mut wanted = vec!["nope0000000".to_string(), "ccccccccccc".to_string()];
+        let (id, path) = db.next_to_measure(&mut wanted).unwrap().unwrap();
+        assert_eq!((id.as_str(), path.as_str()), ("ccccccccccc", "/m/ccccccccccc.m4a"));
+        assert_eq!(wanted, vec!["ccccccccccc"]);
+        db.set_loudness("ccccccccccc", Some((-9.5, Some(-0.2))), "ebur128").unwrap();
+        let item = db.get("ccccccccccc").unwrap().unwrap();
+        assert_eq!((item.loudness, item.peak), (Some(-9.5), Some(-0.2)));
+
+        // Played songs first, videos last, and silence is recorded so it is not read again.
+        assert_eq!(db.next_to_measure(&mut wanted).unwrap().unwrap().0, "aaaaaaaaaaa");
+        assert!(wanted.is_empty());
+        db.set_loudness("aaaaaaaaaaa", None, "none").unwrap();
+        assert_eq!(db.next_to_measure(&mut wanted).unwrap().unwrap().0, "bbbbbbbbbbb");
+        db.set_loudness("bbbbbbbbbbb", None, "error").unwrap();
+        assert_eq!(db.next_to_measure(&mut wanted).unwrap(), None);
+
+        // A new file in its place is measured again.
+        db.finish("aaaaaaaaaaa", &finished("/m/a2.m4a")).unwrap();
+        assert_eq!(db.next_to_measure(&mut wanted).unwrap().unwrap().0, "aaaaaaaaaaa");
     }
 
     #[test]

@@ -1,6 +1,8 @@
 import {
+  Check,
   CornersOut,
   MicrophoneStage,
+  MoonStars,
   Pause,
   Play,
   Queue,
@@ -18,6 +20,7 @@ import { useState } from "react";
 import { IconButton, KeyCombo } from "@/components/ui/Button";
 import { Slider } from "@/components/ui/Controls";
 import { Cover } from "@/components/ui/Cover";
+import { Dropdown, type MenuEntry } from "@/components/ui/Menu";
 import { duration, percent } from "@/lib/format";
 import { useLibrary } from "@/state/library";
 import {
@@ -29,6 +32,8 @@ import {
   seek,
   setCinema,
   setPanel,
+  setSleep,
+  setSpeed,
   setVolume,
   toggle,
   toggleMute,
@@ -158,13 +163,66 @@ function Transport() {
   );
 }
 
+const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
+const speedLabel = (speed: number) => `${speed.toLocaleString("pt-BR")}×`;
+
+/** Speed is for videos, lectures and podcasts: it shows for those, or while it is not 1×. */
+function SpeedMenu({ long }: { long: boolean }) {
+  const speed = usePlayer((s) => s.speed);
+  if (!long && speed === 1) return null;
+  const entries: MenuEntry[] = SPEEDS.map((value) => ({
+    type: "item",
+    label: speedLabel(value),
+    icon: value === speed ? <Check weight="bold" /> : <span className="h-4 w-4" />,
+    onSelect: () => setSpeed(value),
+  }));
+  return (
+    <Dropdown
+      entries={entries}
+      trigger={
+        <IconButton label="Velocidade" active={speed !== 1}>
+          <span className="text-[13px] font-semibold tabular-nums">{speedLabel(speed)}</span>
+        </IconButton>
+      }
+    />
+  );
+}
+
+function SleepMenu() {
+  const sleep = usePlayer((s) => s.sleep);
+  const until = sleep && "at" in sleep ? new Date(sleep.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : null;
+  const label = !sleep ? "Timer para dormir" : until ? `Pausa às ${until}` : "Pausa no fim desta";
+  const entries: MenuEntry[] = [
+    ...[15, 30, 45, 60, 90].map<MenuEntry>((minutes) => ({
+      type: "item",
+      label: minutes < 60 ? `Em ${minutes} minutos` : minutes === 60 ? "Em 1 hora" : "Em 1 hora e meia",
+      onSelect: () => setSleep(minutes),
+    })),
+    { type: "item", label: "No fim desta música", onSelect: () => setSleep("end") },
+    ...(sleep ? [{ type: "separator" } as MenuEntry, { type: "item", label: "Desligar o timer", onSelect: () => setSleep(null) } as MenuEntry] : []),
+  ];
+  return (
+    <Dropdown
+      entries={entries}
+      trigger={
+        <IconButton label={label} active={!!sleep}>
+          <MoonStars className="h-5 w-5" />
+        </IconButton>
+      }
+    />
+  );
+}
+
 function Extras({ isVideo }: { isVideo: boolean }) {
   const panel = usePlayer((s) => s.panel);
   const volume = usePlayer((s) => s.volume);
   const muted = usePlayer((s) => s.muted);
+  const long = usePlayer((s) => s.duration > 20 * 60);
   const VolumeIcon = muted || volume === 0 ? SpeakerSlash : volume < 0.5 ? SpeakerLow : SpeakerHigh;
   return (
     <div className="flex items-center justify-end gap-1">
+      <SpeedMenu long={isVideo || long} />
+      <SleepMenu />
       <IconButton label="Letra" active={panel === "lyrics"} onClick={() => setPanel("lyrics")} shortcut="L">
         <MicrophoneStage className="h-5 w-5" />
       </IconButton>

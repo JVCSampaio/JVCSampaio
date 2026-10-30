@@ -52,37 +52,46 @@ export function Segmented<T extends string>({
 
 export function Slider({
   value,
+  min = 0,
   max,
   onChange,
   onCommit,
   label,
+  valueText,
   className,
   tone = "bone",
   step,
+  vertical,
 }: {
   value: number;
+  min?: number;
   max: number;
   onChange: (value: number) => void;
   onCommit?: (value: number) => void;
   label: string;
+  /** What a screen reader says for the value ("3 dB"), when the number alone is not enough. */
+  valueText?: string;
   className?: string;
   tone?: "bone" | "ember";
   step?: number;
+  vertical?: boolean;
 }) {
   return (
     <SliderPrimitive.Root
-      value={[Math.min(value, max || 0)]}
+      value={[Math.max(min, Math.min(value, max || 0))]}
+      min={min}
       max={max || 1}
-      step={step ?? (max > 60 ? 1 : 0.01)}
+      step={step ?? (max - min > 60 ? 1 : 0.01)}
+      orientation={vertical ? "vertical" : "horizontal"}
       aria-label={label}
       onValueChange={([v]) => onChange(v)}
       onValueCommit={([v]) => onCommit?.(v)}
-      className={cn("group relative flex h-4 touch-none select-none items-center", className)}
+      className={cn("group relative flex touch-none select-none items-center", vertical ? "w-4 flex-col" : "h-4", className)}
     >
-      <SliderPrimitive.Track className="relative h-1 grow overflow-hidden rounded-full bg-border-strong">
-        <SliderPrimitive.Range className={cn("absolute h-full", tone === "ember" ? "bg-primary" : "bg-foreground")} />
+      <SliderPrimitive.Track className={cn("relative grow overflow-hidden rounded-full bg-border-strong", vertical ? "w-1" : "h-1")}>
+        <SliderPrimitive.Range className={cn("absolute", vertical ? "w-full" : "h-full", tone === "ember" ? "bg-primary" : "bg-foreground")} />
       </SliderPrimitive.Track>
-      <SliderPrimitive.Thumb className="block h-3 w-3 rounded-full bg-foreground shadow-[0_0_0_3px_hsl(var(--background))]" />
+      <SliderPrimitive.Thumb aria-label={label} aria-valuetext={valueText} className="block h-3 w-3 rounded-full bg-foreground shadow-[0_0_0_3px_hsl(var(--background))]" />
     </SliderPrimitive.Root>
   );
 }
