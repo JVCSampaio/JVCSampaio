@@ -1,0 +1,223 @@
+name: Requiem Desktop
+
+on:
+  push:
+    paths:
+      - "requiem/**"
+      - ".github/workflows/requiem-desktop.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: requiem-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: requiem
+
+jobs:
+  # The engine without a window: formatting, lints and unit tests.
+  core:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: requiem -> target
+          key: core
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: requiem/package-lock.json
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy -p requiem-core --all-targets --locked -- -D warnings
+      - run: cargo test -p requiem-core --locked
+      - run: npm ci
+      - run: npm run build
+
+  # The same engine against the real YouTube: installs yt-dlp, Deno and FFmpeg, searches,
+  # downloads a song and a video. YouTube sometimes asks datacenter machines to prove they are
+  # not bots, which says nothing about the code, so this job informs and never blocks.
+  online:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: requiem -> target
+          key: core
+      - run: cargo test -p requiem-core --locked -- --ignored --nocapture online_
+
+  # Installers for the three systems.
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows
+            args: ""
+            bundles: requiem/target/release/bundle/nsis/*.exe
+          - os: macos-latest
+            name: macos
+            args: --target universal-apple-darwin
+            bundles: requiem/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+          - os: ubuntu-22.04
+            name: linux
+            args: ""
+            bundles: requiem/target/release/bundle/appimage/*.AppImage
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-libav > /dev/null
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: requiem -> target
+          key: ${{ matrix.name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: requiem/package-lock.json
+      - run: npm ci
+      - name: Build the app and its installer
+        shell: bash
+        run: npx tauri build ${{ matrix.args }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: requiem-${{ matrix.name }}-${{ github.run_number }}
+          path: ${{ matrix.bundles }}
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: requiem-linux-deb-${{ github.run_number }}
+          path: requiem/target/release/bundle/deb/*.deb
+          if-no-files-found: error
+
+  # Installs the .deb on a clean machine and lets the app walk its own screens (REQUIEM_TOUR):
+  # first run, search, a song downloaded and playing with lyrics, a video, library, settings.
+  # Add "[screenshots]" to a commit message to commit the pictures to requiem/docs/screenshots.
+  tour:
+    needs: desktop
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    continue-on-error: true
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: requiem-linux-deb-${{ github.run_number }}
+          path: deb
+      - name: Install the package and a screen
+        working-directory: .
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb imagemagick pulseaudio dbus-x11 > /dev/null
+          sudo apt-get install -y -qq ./deb/*.deb > /dev/null
+      - name: Tour
+        working-directory: .
+        run: |
+          mkdir -p tour
+          pulseaudio --start --exit-idle-time=-1 || true
+          export REQUIEM_TOUR=1 REQUIEM_DATA_DIR="$RUNNER_TEMP/data" REQUIEM_LIBRARY_DIR="$RUNNER_TEMP/library"
+          timeout 1500 xvfb-run -a -s "-screen 0 1320x840x24" dbus-run-session -- bash -c '
+            requiem 2>&1 | while IFS= read -r line; do
+              echo "$line"
+              case "$line" in
+                "TOUR done") pkill -x requiem; break ;;
+                "TOUR start") ;;
+                TOUR\ *) import -window root "tour/${line#TOUR }.png" ;;
+              esac
+            done' || true
+          ls -la tour
+          test -n "$(ls tour/*.png 2>/dev/null)"
+      - name: Shrink screenshots
+        if: always()
+        working-directory: .
+        run: |
+          mkdir -p requiem/docs/screenshots
+          for f in tour/*.png; do
+            [ -e "$f" ] && convert "$f" -quality 84 "requiem/docs/screenshots/$(basename "${f%.png}").jpg"
+          done
+          ls -la requiem/docs/screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tour-${{ github.run_number }}
+          path: tour/
+          if-no-files-found: ignore
+      - name: Commit screenshots
+        if: always() && contains(github.event.head_commit.message, '[screenshots]')
+        working-directory: .
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add requiem/docs/screenshots
+          git commit -m "Update Requiem screenshots from the desktop tour" || exit 0
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
+
+  # The installers go to a fixed release, requiem-latest, with stable download links.
+  # Publishing waits for the owner's approval: it runs only for "[release]" in the commit
+  # message or a manual run.
+  release:
+    needs: [core, desktop]
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: requiem-*-${{ github.run_number }}
+          path: dist
+      - name: Publish the requiem-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mkdir -p out
+          cp dist/requiem-windows-*/*.exe out/Requiem-Windows.exe
+          cp dist/requiem-macos-*/*.dmg out/Requiem-Mac.dmg
+          cp dist/requiem-linux-${{ github.run_number }}/*.AppImage out/Requiem-Linux.AppImage
+          cp dist/requiem-linux-deb-${{ github.run_number }}/*.deb out/requiem-linux.deb
+          ls -la out
+          cat > notes.md <<NOTES
+          Requiem 0.1.${{ github.run_number }} para computador.
+
+          - **Windows:** baixe \`Requiem-Windows.exe\` e instale. Se o Windows avisar que o app é desconhecido, clique em Mais informações e depois em Executar assim mesmo.
+          - **Mac:** baixe \`Requiem-Mac.dmg\` e arraste o Requiem para Aplicativos. Na primeira vez, clique com o botão direito no app e escolha Abrir.
+          - **Linux:** \`Requiem-Linux.AppImage\` roda direto (marque como executável), ou instale \`requiem-linux.deb\`.
+
+          Na primeira abertura, o Requiem baixa o yt-dlp, o Deno e o FFmpeg. Detalhes no
+          [README](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/requiem/README.md).
+          NOTES
+          gh release delete requiem-latest --yes --cleanup-tag || true
+          gh release create requiem-latest out/* \
+            --target "${{ github.sha }}" \
+            --title "Requiem para computador (0.1.${{ github.run_number }})" \
+            --notes-file notes.md \
+            --prerelease

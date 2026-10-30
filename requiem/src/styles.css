@@ -1,0 +1,226 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Grenze Gotisch";
+  src: url("/fonts/GrenzeGotisch.ttf") format("truetype");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  src: url("/fonts/AlegreyaSans-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  src: url("/fonts/AlegreyaSans-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  src: url("/fonts/AlegreyaSans-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Alegreya Sans";
+  src: url("/fonts/AlegreyaSans-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/*
+  Tokens store loose HSL channels; colors are always read as hsl(var(--x)).
+  The night (background), bone (text), ember (the one accent: what plays, the main action)
+  and blood (destructive only). Moonlight exists only in the atmosphere glow.
+*/
+:root {
+  --background: 262 24% 4%;
+  --surface: 262 18% 6.5%;
+  --card: 262 15% 8.5%;
+  --raised: 262 13% 11.5%;
+  --border: 262 11% 15%;
+  --border-strong: 262 9% 24%;
+  --foreground: 37 30% 87%;
+  --muted-foreground: 32 9% 60%;
+  --faint-foreground: 32 7% 43%;
+  --primary: 22 90% 54%;
+  --primary-hover: 24 95% 60%;
+  --primary-foreground: 262 24% 6%;
+  --destructive: 356 72% 58%;
+  --moon: 218 35% 75%;
+
+  /* Motion SSoT, mirrored in src/lib/motion.ts */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --dur-press: 120ms;
+  --dur-fast: 160ms;
+  --dur-base: 200ms;
+  --dur-slow: 300ms;
+
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-surface: hsl(var(--surface));
+  --color-card: hsl(var(--card));
+  --color-raised: hsl(var(--raised));
+  --color-border: hsl(var(--border));
+  --color-border-strong: hsl(var(--border-strong));
+  --color-foreground: hsl(var(--foreground));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-faint-foreground: hsl(var(--faint-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-hover: hsl(var(--primary-hover));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-destructive: hsl(var(--destructive));
+
+  --font-sans: "Alegreya Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Grenze Gotisch", "Alegreya Sans", serif;
+
+  --radius-control: 6px;
+  --radius-surface: 10px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [data-selectable] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* Tailwind v4 leaves buttons with the arrow cursor. */
+  :is(button, [role="button"], a[href], summary, [role="menuitem"], [role="tab"], [role="option"], [role="radio"], [role="switch"], label[for]):not(:disabled, [aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.35);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border-strong)) transparent;
+  }
+}
+
+@layer utilities {
+  /* The night: moonlight from the upper right, embers rising from the player. */
+  .atmosphere {
+    background:
+      radial-gradient(1100px 640px at 88% -12%, hsl(var(--moon) / 0.075), transparent 62%),
+      radial-gradient(900px 520px at 18% 112%, hsl(var(--primary) / 0.07), transparent 60%),
+      hsl(var(--background));
+  }
+
+  .ease-out-ui {
+    transition-timing-function: var(--ease-out);
+  }
+
+  .skeleton {
+    background-color: hsl(var(--raised));
+    animation: skeleton-pulse 1.4s ease-in-out infinite;
+  }
+
+  /* The flame beside what is playing flickers only while sound comes out. */
+  .flame-live {
+    animation: flame 1.6s ease-in-out infinite;
+    transform-origin: 50% 90%;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes flame {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  35% {
+    opacity: 0.82;
+    transform: scale(0.94, 0.97);
+  }
+  70% {
+    opacity: 0.93;
+    transform: scale(0.98, 1);
+  }
+}
+
+/* Radix overlays grow from their trigger; modals from the center. */
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.menu-content[data-state="open"] {
+  animation: overlay-in var(--dur-fast) var(--ease-out);
+}
+.dialog-content[data-state="open"] {
+  animation: overlay-in var(--dur-base) var(--ease-out);
+}
+.dialog-overlay[data-state="open"] {
+  animation: fade-in var(--dur-base) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

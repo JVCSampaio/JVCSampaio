@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- App icon: the Phosphor "skull" (fill) in bone over the night, with an ember glow below. -->
+  <defs>
+    <radialGradient id="ember" cx="50%" cy="100%" r="75%">
+      <stop offset="0%" stop-color="#F26B21" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#F26B21" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#F26B21" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="moon" cx="80%" cy="0%" r="70%">
+      <stop offset="0%" stop-color="#AFC0DD" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#AFC0DD" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="#0D0A14"/>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#moon)"/>
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#ember)"/>
+  <rect x="64.5" y="64.5" width="895" height="895" rx="199.5" fill="none" stroke="#2A2433" stroke-width="3"/>
+  <g transform="translate(212 196) scale(2.34375)" fill="#EADFCB">
+    <path d="M128,16C70.65,16,24,60.86,24,116c0,34.1,18.27,66,48,84.28V216a16,16,0,0,0,16,16h8a4,4,0,0,0,4-4V200.27a8.17,8.17,0,0,1,7.47-8.25,8,8,0,0,1,8.53,8v28a4,4,0,0,0,4,4h16a4,4,0,0,0,4-4V200.27a8.17,8.17,0,0,1,7.47-8.25,8,8,0,0,1,8.53,8v28a4,4,0,0,0,4,4h8a16,16,0,0,0,16-16V200.28C213.73,182,232,150.1,232,116,232,60.86,185.35,16,128,16ZM92,152a20,20,0,1,1,20-20A20,20,0,0,1,92,152Zm72,0a20,20,0,1,1,20-20A20,20,0,0,1,164,152Z"/>
+  </g>
+</svg>
