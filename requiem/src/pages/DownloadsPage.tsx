@@ -175,6 +175,7 @@ function KindIcon({ item }: { item: Item }) {
 }
 
 function Row({ item, detail, error, wide, children }: { item: Item; detail: string; error?: boolean; wide: boolean; children: React.ReactNode }) {
+  const facts = [item.artist || item.channel, duration(item.duration)].filter(Boolean).join(", ");
   return (
     <li className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 rounded-control px-3 py-2 transition-[background-color] [transition-duration:var(--dur-fast)] hover:bg-raised">
       <RowCover src={coverUrl(item)} kind={item.kind === "video" ? "video" : "music"} wide={wide} />
@@ -184,8 +185,8 @@ function Row({ item, detail, error, wide, children }: { item: Item; detail: stri
           <span className="truncate text-[15px] font-medium text-foreground">{item.title}</span>
         </div>
         <div className="truncate text-[13px] text-muted-foreground">
-          {[item.artist || item.channel, duration(item.duration)].filter(Boolean).join(", ")}
-          {detail && <span className={cn(error ? "text-destructive" : "text-faint-foreground")}>{`, ${detail}`}</span>}
+          {facts}
+          {detail && <span className={cn(error ? "text-destructive" : "text-faint-foreground")}>{facts ? `, ${detail}` : detail}</span>}
         </div>
       </div>
       <div className="flex items-center gap-1">{children}</div>

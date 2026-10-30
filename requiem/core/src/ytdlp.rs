@@ -84,22 +84,24 @@ impl YtDlp {
         let out = cmd.output().await.context("yt-dlp não abriu")?;
         let stdout = String::from_utf8_lossy(&out.stdout);
         let stderr = String::from_utf8_lossy(&out.stderr);
-        if !out.status.success() && stdout.trim().is_empty() {
-            return Err(anyhow!(friendly_error(&stderr)));
+        // A failed read still prints JSON: `null` for the video it could not read.
+        let value: Option<Value> = serde_json::from_str(stdout.trim()).ok();
+        match value {
+            Some(v) if v.is_object() => Ok(v),
+            _ => {
+                log::warn!("yt-dlp gave no answer: {}", stderr.trim());
+                Err(anyhow!(friendly_error(&stderr)))
+            }
         }
-        serde_json::from_str(stdout.trim()).map_err(|_| anyhow!(friendly_error(&stderr)))
     }
 
+    /// Songs search the same index as videos: YouTube Music's flat results carry no artist and
+    /// no length, which leaves a list of identical titles to choose from.
     pub async fn search(&self, query: &str, kind: Kind, limit: u32) -> Result<Vec<Entry>> {
-        let target = search_target(query, kind, limit);
-        let end = limit.to_string();
-        let listing = self.json(&["--flat-playlist", "-J", "--playlist-end", &end, &target]).await?;
+        let listing = self.json(&["--flat-playlist", "-J", &search_target(query, limit)]).await?;
         let mut found = media::entries(&listing);
-        if found.is_empty() && kind == Kind::Music {
-            // YouTube Music search can come back empty in some regions; regular search answers.
-            let fallback = search_target(query, Kind::Video, limit);
-            let listing = self.json(&["--flat-playlist", "-J", "--playlist-end", &end, &fallback]).await?;
-            found = media::entries(&listing);
+        if kind == Kind::Music {
+            rank_for_music(&mut found);
         }
         Ok(found)
     }
@@ -191,26 +193,14 @@ impl YtDlp {
     }
 }
 
-fn search_target(query: &str, kind: Kind, limit: u32) -> String {
-    match kind {
-        Kind::Music => {
-            let q: String = url_encode(query);
-            format!("https://music.youtube.com/search?q={q}#songs")
-        }
-        _ => format!("ytsearch{limit}:{query}"),
-    }
+fn search_target(query: &str, limit: u32) -> String {
+    format!("ytsearch{limit}:{query}")
 }
 
-fn url_encode(text: &str) -> String {
-    let mut out = String::new();
-    for b in text.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(b as char),
-            b' ' => out.push('+'),
-            _ => out.push_str(&format!("%{b:02X}")),
-        }
-    }
-    out
+/// Looking for a song, Shorts and hour-long mixes are rarely the answer: they go to the end,
+/// the rest keeps YouTube's order.
+fn rank_for_music(entries: &mut [Entry]) {
+    entries.sort_by_key(|e| e.is_short || e.duration.is_some_and(|d| d > 20.0 * 60.0));
 }
 
 /// Formats chosen so every platform's web view plays the file: AAC audio, H.264 video in MP4.
@@ -418,16 +408,26 @@ mod tests {
     }
 
     #[test]
-    fn music_search_uses_youtube_music() {
-        assert_eq!(
-            search_target("danse macabre", Kind::Music, 20),
-            "https://music.youtube.com/search?q=danse+macabre#songs"
-        );
-        assert_eq!(
-            search_target("ação & fé", Kind::Music, 20),
-            "https://music.youtube.com/search?q=a%C3%A7%C3%A3o+%26+f%C3%A9#songs"
-        );
-        assert_eq!(search_target("x", Kind::Video, 15), "ytsearch15:x");
+    fn songs_come_before_shorts_and_mixes() {
+        assert_eq!(search_target("ação & fé", 20), "ytsearch20:ação & fé");
+        let entry = |id: &str, duration: f64, is_short: bool| Entry {
+            id: id.into(),
+            title: id.into(),
+            artist: String::new(),
+            channel: String::new(),
+            duration: Some(duration),
+            thumbnail: String::new(),
+            is_short,
+        };
+        let mut found = vec![
+            entry("mix", 3600.0, false),
+            entry("short", 30.0, true),
+            entry("song", 240.0, false),
+            entry("live", 600.0, false),
+        ];
+        rank_for_music(&mut found);
+        let order: Vec<&str> = found.iter().map(|e| e.id.as_str()).collect();
+        assert_eq!(order, ["song", "live", "mix", "short"]);
     }
 
     #[test]
