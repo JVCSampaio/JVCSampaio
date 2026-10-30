@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { BackBar, Hero, PlayActions } from "@/components/library/Hero";
 import { Section, Shelf, VideoTile } from "@/components/library/Tiles";
 import { sortTracks, TrackList, type TrackSort } from "@/components/library/TrackList";
+import { VirtualGrid } from "@/components/library/VirtualGrid";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Segmented, TextField } from "@/components/ui/Controls";
 import { Cover } from "@/components/ui/Cover";
@@ -182,25 +183,31 @@ export function LibraryPage({ tab }: { tab: LibraryTab }) {
         ) : tab === "music" ? (
           <TrackList items={shownSongs} sort={sort} onSort={setSort} />
         ) : tab === "videos" ? (
-          <div className="-mx-2 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-y-2">
-            {shownVideos.map((item, i) => (
-              <VideoTile key={item.id} item={item} row={shownVideos} index={i} width="w-full" />
-            ))}
-          </div>
+          <VideoGrid videos={shownVideos} />
         ) : tab === "artists" ? (
-          <div className="-mx-2 grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-y-4">
-            {shownArtists.map((a) => (
-              <ArtistTile key={a.name} artist={a} />
-            ))}
+          <div className="-mx-2">
+            <VirtualGrid items={shownArtists} minWidth={176} rowGap={16} getKey={(a) => a.name} estimateHeight={(w) => w + 54}>
+              {(a) => <ArtistTile artist={a} />}
+            </VirtualGrid>
           </div>
         ) : (
-          <div className="-mx-2 grid grid-cols-[repeat(auto-fill,minmax(176px,1fr))] gap-y-4">
-            {shownAlbums.map((a) => (
-              <AlbumTile key={`${a.name}-${a.artist}`} album={a} />
-            ))}
+          <div className="-mx-2">
+            <VirtualGrid items={shownAlbums} minWidth={176} rowGap={16} getKey={(a) => `${a.name}\u0000${a.artist}`} estimateHeight={(w) => w + 50}>
+              {(a) => <AlbumTile album={a} />}
+            </VirtualGrid>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function VideoGrid({ videos }: { videos: Item[] }) {
+  return (
+    <div className="-mx-2">
+      <VirtualGrid items={videos} minWidth={240} rowGap={8} getKey={(v) => v.id} estimateHeight={(w) => (w - 16) * 0.5625 + 90}>
+        {(item, i) => <VideoTile item={item} row={videos} index={i} width="w-full" />}
+      </VirtualGrid>
     </div>
   );
 }
@@ -253,9 +260,13 @@ function AlbumTile({ album }: { album: AlbumGroup }) {
   );
 }
 
+/** A channel can have thousands of videos: the shelf shows the newest, "Ver todos" the grid. */
+const SHELF_VIDEOS = 30;
+
 export function ArtistPage({ artist }: { artist: string }) {
   const items = useLibrary((s) => s.items);
   const [sort, setSort] = useState<TrackSort>({ key: "added", dir: "desc" });
+  const [allVideos, setAllVideos] = useState(false);
   const all = useMemo(() => libraryItems(items), [items]);
   const k = key(artist);
   const songs = useMemo(() => all.filter((i) => i.kind === "music" && key(i.artist) === k), [all, k]);
@@ -288,12 +299,25 @@ export function ArtistPage({ artist }: { artist: string }) {
           </Section>
         )}
         {videos.length > 0 && (
-          <Section title="Vídeos">
-            <Shelf>
-              {videos.map((item, i) => (
-                <VideoTile key={item.id} item={item} row={videos} index={i} />
-              ))}
-            </Shelf>
+          <Section
+            title="Vídeos"
+            action={
+              videos.length > SHELF_VIDEOS ? (
+                <Button variant="ghost" size="sm" onClick={() => setAllVideos((v) => !v)}>
+                  {allVideos ? "Mostrar menos" : `Ver todos os ${videos.length}`}
+                </Button>
+              ) : null
+            }
+          >
+            {allVideos ? (
+              <VideoGrid videos={videos} />
+            ) : (
+              <Shelf>
+                {videos.slice(0, SHELF_VIDEOS).map((item, i) => (
+                  <VideoTile key={item.id} item={item} row={videos} index={i} />
+                ))}
+              </Shelf>
+            )}
           </Section>
         )}
       </div>

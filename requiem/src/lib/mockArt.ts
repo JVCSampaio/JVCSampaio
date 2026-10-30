@@ -21,8 +21,18 @@ function random(seed: string) {
   };
 }
 
+const drawn = new Map<string, string>();
+
 export function mockArt(seed: string, video = false): string {
   if (typeof document === "undefined") return "";
+  const known = drawn.get(`${seed}|${video}`);
+  if (known) return known;
+  const art = draw(seed, video);
+  drawn.set(`${seed}|${video}`, art);
+  return art;
+}
+
+function draw(seed: string, video: boolean): string {
   const rand = random(seed);
   const w = video ? 480 : 320;
   const h = video ? 270 : 320;

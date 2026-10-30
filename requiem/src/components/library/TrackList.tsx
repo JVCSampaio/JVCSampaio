@@ -1,12 +1,16 @@
-import { CaretDown, CaretUp, Clock, DotsThree, Flame } from "@phosphor-icons/react";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CaretDown, CaretUp, Clock, DotsSixVertical, DotsThree, Flame } from "@phosphor-icons/react";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
+import { useRef, type ReactNode } from "react";
 import { RowCover } from "@/components/ui/Cover";
+import { backend } from "@/lib/backend";
 import { Dropdown, RightClick } from "@/components/ui/Menu";
 import { cn, duration } from "@/lib/format";
 import type { Item, Playlist } from "@/lib/types";
+import { useMainScroll } from "@/lib/useMainScroll";
+import { dropSide, moveId, useReorder } from "@/lib/useReorder";
 import { useLibrary } from "@/state/library";
 import { coverUrl, playList, usePlayer } from "@/state/player";
+import { toast } from "@/state/toasts";
 import { itemMenu } from "./itemMenu";
 import { LikeButton } from "./LikeButton";
 
@@ -56,8 +60,21 @@ function HeaderCell({ label, sortKey, sort, onSort, end }: { label: ReactNode; s
   );
 }
 
+/** Puts a playlist in a new order at once and tells the engine; if the engine refuses, the
+ *  saved order comes back. */
+function reorderPlaylist(playlist: Playlist, itemIds: string[]) {
+  useLibrary.setState((s) => ({ playlists: s.playlists.map((p) => (p.id === playlist.id ? { ...p, itemIds } : p)) }));
+  void backend()
+    .then((api) => api.playlistReorder(playlist.id, itemIds))
+    .catch((e) => {
+      toast(String(e), "error");
+      void useLibrary.getState().reloadPlaylists();
+    });
+}
+
 /** The song list of the library, an artist, an album or a playlist. Virtualized: thousands of
- *  rows scroll like ten. Double click or Enter plays from that row on. */
+ *  rows scroll like ten. Double click or Enter plays from that row on. In a playlist shown in
+ *  its own order, rows are dragged by their number to reorder it. */
 export function TrackList({
   items,
   inPlaylist,
@@ -72,27 +89,22 @@ export function TrackList({
   onSort?: (sort: TrackSort) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
-  const [scroller, setScroller] = useState<HTMLElement | null>(null);
-  const [margin, setMargin] = useState(0);
+  const { scroller, margin } = useMainScroll(listRef);
   const playlists = useLibrary((s) => s.playlists);
   const playing = usePlayer((s) => s.playing);
   const nowId = usePlayer((s) => s.queue[s.index] ?? null);
-
-  useEffect(() => {
-    const main = document.getElementById("main-scroll");
-    setScroller(main);
-    // Distance from the top of the scrolling area to the list, independent of the scroll.
-    const measure = () => {
-      if (!main || !listRef.current) return;
-      setMargin(listRef.current.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop);
-    };
-    measure();
-    // Anything above the list growing or shrinking (a banner, a hero) moves it.
-    const ro = new ResizeObserver(measure);
-    const content = document.getElementById("main-content");
-    if (content) ro.observe(content);
-    return () => ro.disconnect();
-  }, []);
+  const reorderable = !!inPlaylist && (!sort || sort.key === "added");
+  const { drag, handle, keyMove } = useReorder({
+    count: items.length,
+    indexAt: (y) => Math.floor((y - (listRef.current?.getBoundingClientRect().top ?? 0)) / ROW),
+    scroller: () => scroller,
+    onMove: (from, to) => {
+      if (inPlaylist) reorderPlaylist(inPlaylist, moveId(inPlaylist.itemIds, items[from].id, items[to].id, to > from));
+    },
+  });
+  // The dragged row holds the pointer: it stays drawn even when scrolled out of view.
+  const dragging = useRef<number | null>(null);
+  dragging.current = drag?.from ?? null;
 
   const virtualizer = useVirtualizer({
     count: items.length,
@@ -100,6 +112,11 @@ export function TrackList({
     estimateSize: () => ROW,
     overscan: 12,
     scrollMargin: margin,
+    rangeExtractor: (range) => {
+      const rows = defaultRangeExtractor(range);
+      const kept = dragging.current;
+      return kept == null || rows.includes(kept) ? rows : [...rows, kept].sort((a, b) => a - b);
+    },
   });
 
   const ids = items.map((i) => i.id);
@@ -123,28 +140,43 @@ export function TrackList({
           const item = items[row.index];
           const current = item.id === nowId;
           const menu = itemMenu(item, playlists, inPlaylist);
+          const side = dropSide(drag, row.index);
           return (
             <RightClick key={item.id} entries={menu}>
               <div
                 role="button"
                 tabIndex={0}
                 aria-label={`${item.title}, ${item.artist}`}
+                aria-keyshortcuts={reorderable ? "Alt+ArrowUp Alt+ArrowDown" : undefined}
                 onDoubleClick={() => playList(ids, row.index)}
                 onKeyDown={(e) => {
+                  if (reorderable && keyMove(row.index, e)) return;
                   if (e.key === "Enter") playList(ids, row.index);
                 }}
                 className={cn(
                   "group absolute left-0 right-0 grid items-center gap-4 rounded-control px-3",
                   "transition-[background-color] [transition-duration:var(--dur-fast)] hover:bg-raised focus-visible:bg-raised",
+                  drag?.from === row.index && "opacity-50",
                   cols,
                 )}
                 style={{ height: ROW, transform: `translateY(${row.start - margin}px)` }}
               >
-                <span className="flex justify-end text-right text-sm tabular-nums text-faint-foreground">
+                {side && <span aria-hidden className={cn("absolute inset-x-3 h-0.5 rounded-full bg-primary", side === "above" ? "-top-px" : "-bottom-px")} />}
+                <span className="relative flex h-full items-center justify-end text-right text-sm tabular-nums text-faint-foreground">
                   {current ? (
                     <Flame weight="fill" className={cn("h-4 w-4 text-primary", playing && "flame-live")} aria-label="Tocando agora" />
                   ) : (
-                    row.index + 1
+                    <span className={cn(reorderable && "[@media(hover:hover)]:group-hover:invisible")}>{row.index + 1}</span>
+                  )}
+                  {reorderable && (
+                    <span
+                      {...handle(row.index)}
+                      aria-hidden
+                      data-drag-handle
+                      className="absolute inset-y-0 -left-2 -right-1 flex cursor-grab touch-none items-center justify-end text-muted-foreground active:cursor-grabbing [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+                    >
+                      <DotsSixVertical weight="bold" className="h-4 w-4" />
+                    </span>
                   )}
                 </span>
                 <div className="flex min-w-0 items-center gap-3">

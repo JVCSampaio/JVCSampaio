@@ -1,4 +1,4 @@
-import { ArrowClockwise, CornersOut, Flame, Radio, X } from "@phosphor-icons/react";
+import { ArrowClockwise, CornersOut, DotsSixVertical, Flame, Radio, X } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Segmented, Skeleton, Switch } from "@/components/ui/Controls";
@@ -8,8 +8,20 @@ import { cn, duration } from "@/lib/format";
 import { WAIT } from "@/lib/motion";
 import type { Lyrics } from "@/lib/types";
 import { useDelayed } from "@/lib/useDelayed";
+import { dropSide, useReorder } from "@/lib/useReorder";
 import { useLibrary } from "@/state/library";
-import { clearUpcoming, coverUrl, jump, removeFromQueue, seek, setCinema, setPanel, usePlayer, type Panel } from "@/state/player";
+import {
+  clearUpcoming,
+  coverUrl,
+  jump,
+  moveInQueue,
+  removeFromQueue,
+  seek,
+  setCinema,
+  setPanel,
+  usePlayer,
+  type Panel,
+} from "@/state/player";
 import { retryRadio, stopRadio, useRadio } from "@/state/radio";
 import { useStage } from "@/state/stage";
 
@@ -48,7 +60,9 @@ export function NowPlayingPanel() {
               { value: "queue", label: "Fila" },
             ]}
           />
-          <div className="mt-3 min-h-0 flex-1 overflow-y-auto">{panel === "lyrics" ? <LyricsView id={item.id} /> : <QueueView />}</div>
+          <div className="mt-3 min-h-0 flex-1 overflow-y-auto" data-panel-scroll>
+            {panel === "lyrics" ? <LyricsView id={item.id} /> : <QueueView />}
+          </div>
         </div>
       ) : (
         <p className="relative px-5 pt-6 text-sm text-muted-foreground">Nada tocando.</p>
@@ -197,6 +211,17 @@ function QueueView() {
   const firstAdded = upcoming.findIndex((qid) => added.has(qid));
   const seed = radio.seedId ? items[radio.seedId] : undefined;
   const autoplay = settings?.autoplay !== false;
+  const listRef = useRef<HTMLOListElement>(null);
+  const { drag, handle, keyMove } = useReorder({
+    count: upcoming.length,
+    indexAt: (y) => {
+      const rows = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-queue-row]") ?? [])];
+      const below = rows.find((row) => y < row.getBoundingClientRect().bottom);
+      return Number((below ?? rows[rows.length - 1])?.dataset.queueRow ?? 0);
+    },
+    scroller: () => listRef.current?.closest<HTMLElement>("[data-panel-scroll]") ?? null,
+    onMove: (from, to) => moveInQueue(index + 1 + from, index + 1 + to),
+  });
 
   return (
     <div className="pb-2">
@@ -211,18 +236,34 @@ function QueueView() {
           </Button>
         </div>
       )}
-      <ol className="space-y-0.5">
+      <ol ref={listRef} className="space-y-0.5">
         {upcoming.map((qid, k) => {
           const it = items[qid];
           if (!it) return null;
           const at = index + 1 + k;
+          const side = dropSide(drag, k);
           return (
-            <li key={`${qid}-${at}`}>
+            <li key={`${qid}-${at}`} data-queue-row={k} className="relative">
               {k === firstAdded && radio.mode === "autoplay" && (
                 <p className="px-2 pb-1 pt-3 text-[13px] font-medium text-faint-foreground">Parecidas com o que você ouviu</p>
               )}
-              <div className="group flex items-center gap-3 rounded-control px-2 py-1.5 hover:bg-raised">
-                <button type="button" onClick={() => jump(at)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+              {side && <span aria-hidden className={cn("absolute inset-x-2 z-10 h-0.5 rounded-full bg-primary", side === "above" ? "-top-px" : "-bottom-px")} />}
+              <div className={cn("group flex items-center gap-1 rounded-control py-1.5 pr-2 hover:bg-raised", drag?.from === k && "opacity-50")}>
+                <span
+                  {...handle(k)}
+                  aria-hidden
+                  data-drag-handle
+                  className="flex h-8 w-5 shrink-0 cursor-grab touch-none items-center justify-center text-faint-foreground active:cursor-grabbing [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+                >
+                  <DotsSixVertical weight="bold" className="h-4 w-4" />
+                </span>
+                <button
+                  type="button"
+                  onClick={() => jump(at)}
+                  onKeyDown={(e) => keyMove(k, e)}
+                  aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                >
                   <RowCover src={coverUrl(it)} kind={it.kind === "video" ? "video" : "music"} wide={wide} />
                   <span className="min-w-0">
                     <span className="block truncate text-[15px] text-foreground">{it.title}</span>

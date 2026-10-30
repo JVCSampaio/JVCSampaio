@@ -47,7 +47,7 @@ const seeds: Seed[] = [
 /** Songs the person already had on the computer, found in the Music folder. */
 const localIds = new Set(["nocturne008", "gymnope0011", "valsetr0012", "erlking0010", "fantasia018"]);
 
-function seedItem([id, kind, title, artist, album, duration, daysAgo, plays]: Seed, i: number): Item {
+function seedItem([id, kind, title, artist, album, duration, daysAgo, plays]: Seed, i: number, art?: string): Item {
   const at = now - daysAgo * DAY;
   return {
     id,
@@ -62,7 +62,7 @@ function seedItem([id, kind, title, artist, album, duration, daysAgo, plays]: Se
     error: null,
     filePath: `/Músicas/${artist} - ${title} [${id}].m4a`,
     thumbPath: null,
-    thumbnailUrl: mockArt(album ?? id, kind === "video"),
+    thumbnailUrl: art ?? mockArt(album ?? id, kind === "video"),
     fileSize: duration * 16_000,
     width: kind === "video" ? 1280 : null,
     height: kind === "video" ? 720 : null,
@@ -133,6 +133,16 @@ export function createMockBackend(): Backend {
       ...p,
     } as Item);
   });
+
+  // `?seed=5000` adds that many songs and videos, to try a large library.
+  const extra = Math.min(Number(new URLSearchParams(location.search).get("seed")) || 0, 50_000);
+  for (let n = 0; n < extra; n++) {
+    const video = n % 7 === 0;
+    const id = `x${n.toString(36).padStart(10, "0")}`;
+    const album = video ? null : `Disco ${n % 1300}`;
+    const seed: Seed = [id, video ? "video" : "music", `Faixa ${n + 1}`, `Artista ${n % 900}`, album, 120 + (n % 300), (n % 400) + 1, n % 3];
+    items.set(id, seedItem(seed, n + 3, mockArt(`extra${n % 24}`, video)));
+  }
 
   // A play log that matches the play counts, spread over the last two months.
   const plays: Play[] = [];

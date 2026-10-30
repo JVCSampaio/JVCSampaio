@@ -341,6 +341,21 @@ export function enqueue(ids: string[], options: { next?: boolean; silent?: boole
   toast(options.next ? "Toca em seguida." : playable.length === 1 ? "Adicionada à fila." : `${playable.length} itens adicionados à fila.`);
 }
 
+/** Moves the queue entry at `from` to `to` (positions in the whole queue). What plays keeps
+ *  playing; only its position changes when it is moved or something crosses it. */
+export function moveInQueue(from: number, to: number) {
+  const { queue, index } = get();
+  if (from === to || from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
+  const next = [...queue];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  let current = index;
+  if (from === index) current = to;
+  else if (from < index && to >= index) current = index - 1;
+  else if (from > index && to <= index) current = index + 1;
+  set({ queue: next, index: current });
+}
+
 export function removeFromQueue(i: number) {
   const { queue, index } = get();
   if (i === index) return;
