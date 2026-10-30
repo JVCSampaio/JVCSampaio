@@ -72,6 +72,11 @@ export interface Settings {
   musicFolders: string[] | null;
 }
 
+export interface Update {
+  version: string;
+  url: string;
+}
+
 export interface LocalStatus {
   running: boolean;
   found: number;
@@ -124,7 +129,8 @@ export type EngineEvent =
   | ({ type: "tools" } & ToolsReport)
   | { type: "notice"; message: string }
   | { type: "settings"; settings: Settings }
-  | ({ type: "local" } & LocalStatus);
+  | ({ type: "local" } & LocalStatus)
+  | ({ type: "update" } & Update);
 
 export type Resolved =
   | { type: "video"; entry: Entry }
@@ -145,6 +151,7 @@ export interface Overview {
   platform: string;
   localFolders: string[];
   local: LocalStatus;
+  update: Update | null;
 }
 
 export interface LyricLine {

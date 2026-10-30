@@ -97,6 +97,9 @@ jobs:
           cache: npm
           cache-dependency-path: requiem/package-lock.json
       - run: npm ci
+      # After the cache restore, so the cache key does not change on every run.
+      - name: Stamp the version
+        run: node scripts/stamp-version.mjs 0.1.${{ github.run_number }}
       - name: Build the app and its installer
         shell: bash
         run: npx tauri build ${{ matrix.args }}
@@ -242,6 +245,8 @@ jobs:
 
           Na primeira abertura, o Requiem baixa o yt-dlp, o Deno e o FFmpeg. Detalhes no
           [README](https://github.com/${{ github.repository }}/blob/${{ github.sha }}/requiem/README.md).
+
+          <!-- requiem-version: 0.1.${{ github.run_number }} -->
           NOTES
           gh release delete requiem-latest --yes --cleanup-tag || true
           gh release create requiem-latest out/* \

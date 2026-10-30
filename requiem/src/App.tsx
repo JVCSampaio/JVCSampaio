@@ -3,7 +3,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { useEffect } from "react";
 import { MediaStage } from "@/components/shell/MediaStage";
 import { NowPlayingPanel } from "@/components/shell/NowPlaying";
-import { DialogsHost, Toasts, ToolsBanner } from "@/components/shell/Overlays";
+import { DialogsHost, Toasts, ToolsBanner, UpdateBanner } from "@/components/shell/Overlays";
 import { PlayerBar } from "@/components/shell/PlayerBar";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Button } from "@/components/ui/Button";
@@ -64,6 +64,7 @@ export function App() {
           <Sidebar />
           <main id="main-scroll" className="relative min-h-0 overflow-y-auto" aria-label="Conteúdo">
             <div id="main-content" className="@container flex min-h-full flex-col">
+              <UpdateBanner />
               <ToolsBanner />
               <div className="grid flex-1 grid-cols-[minmax(0,1fr)]">{!ready ? <PageSkeleton /> : loadError ? <LoadError message={loadError} /> : <Page route={route} />}</div>
             </div>

@@ -13,4 +13,5 @@ pub mod process;
 pub mod server;
 pub mod settings;
 pub mod tools;
+pub mod update;
 pub mod ytdlp;

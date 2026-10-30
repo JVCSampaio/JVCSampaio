@@ -141,6 +141,7 @@ export function createMockBackend(): Backend {
   let sync: SyncStatus = { running: false, lastRunAt: now - 12 * 60_000, lastFound: 3, lastError: null, nextRunAt: now + 18 * 60_000 };
   const tools: ToolsStatus = { ytdlp: "2026.10.18", deno: "2.5.4", ffmpeg: "6.1.1", ready: true };
 
+  const newer = { version: "0.1.9", url: "https://github.com/JVCSampaio/JVCSampaio/releases/tag/requiem-latest" };
   const listeners = new Set<(e: EngineEvent) => void>();
   const emit = (e: EngineEvent) => listeners.forEach((l) => l(e));
 
@@ -243,6 +244,7 @@ export function createMockBackend(): Backend {
           platform: "linux",
           localFolders: settings.musicFolders ?? ["/home/voce/Música"],
           local: { running: false, found: [...items.values()].filter((i) => i.source === "local").length },
+          update: new URLSearchParams(location.search).has("update") ? newer : null,
         },
         50,
       ),
@@ -364,6 +366,8 @@ export function createMockBackend(): Backend {
     },
     lyrics: (id) => wait(id === "dmacabre001" || id === "lacrimosa06" ? lyrics : null, 400),
     openLibraryFolder: () => wait(undefined),
+    updateCheck: () => wait(newer, 900),
+    updateOpen: () => wait(undefined),
     libraryRescan: async () => {
       const found = [...items.values()].filter((i) => i.source === "local").length;
       emit({ type: "local", running: true, found: 0 });

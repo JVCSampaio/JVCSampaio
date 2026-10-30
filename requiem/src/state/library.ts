@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { backend } from "@/lib/backend";
-import type { EngineEvent, InstallStep, Item, LocalStatus, Overview, Playlist, Progress, Settings, SyncStatus, ToolsStatus } from "@/lib/types";
+import type { EngineEvent, InstallStep, Item, LocalStatus, Overview, Playlist, Progress, Settings, SyncStatus, ToolsStatus, Update } from "@/lib/types";
 import { toast } from "./toasts";
 
 interface ToolsState {
@@ -23,6 +23,8 @@ interface LibraryState {
   settings: Settings | null;
   /** Reading the folders of songs already on the computer. */
   local: LocalStatus;
+  /** A newer published version. */
+  update: Update | null;
   init(): Promise<void>;
   reload(): Promise<void>;
   reloadPlaylists(): Promise<void>;
@@ -40,6 +42,7 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
   tools: { status: null, installing: false, step: null, error: null },
   settings: null,
   local: { running: false, found: 0 },
+  update: null,
 
   async init() {
     const api = await backend();
@@ -51,7 +54,7 @@ export const useLibrary = create<LibraryState>()((set, get) => ({
         api.syncStatus(),
         api.toolsStatus(),
       ]);
-      set({ overview, settings, sync, tools, local: overview.local });
+      set({ overview, settings, sync, tools, local: overview.local, update: overview.update });
       await get().reload();
       set({ ready: true });
     } catch (e) {
@@ -128,6 +131,9 @@ function handleEvent(event: EngineEvent) {
       break;
     case "local":
       set({ local: { running: event.running, found: event.found } });
+      break;
+    case "update":
+      set({ update: { version: event.version, url: event.url } });
       break;
   }
 }

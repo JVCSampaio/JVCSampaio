@@ -19,6 +19,7 @@ use crate::media::{self, Decision, Entry, Kind, Rules};
 use crate::server::{self, Asset};
 use crate::settings::{Account, Settings};
 use crate::tools::{InstallStep, Tools, ToolsStatus};
+use crate::update::{self, Update};
 use crate::ytdlp::{Auth, DownloadPlan, Progress, YtDlp};
 
 const WORKERS: usize = 2;
@@ -91,6 +92,7 @@ pub enum Event {
         settings: Box<Settings>,
     },
     Local(LocalStatus),
+    Update(Update),
 }
 
 /// Reading the folders of songs already on the computer.
@@ -140,6 +142,8 @@ pub struct Overview {
     /// The folders read into the library, the Music folder when the person chose none.
     pub local_folders: Vec<String>,
     pub local: LocalStatus,
+    /// A newer published version, when there is one.
+    pub update: Option<Update>,
 }
 
 pub struct Engine {
@@ -157,6 +161,7 @@ pub struct Engine {
     tools_report: Mutex<ToolsReport>,
     wake_scan: Notify,
     local: Mutex<LocalStatus>,
+    update: Mutex<Option<Update>>,
     media_base: RwLock<String>,
 }
 
@@ -198,6 +203,7 @@ impl Engine {
             tools_report: Mutex::new(ToolsReport::default()),
             wake_scan: Notify::new(),
             local: Mutex::new(LocalStatus::default()),
+            update: Mutex::new(None),
             media_base: RwLock::new(String::new()),
         });
 
@@ -225,6 +231,8 @@ impl Engine {
         tokio::spawn(async move { setup.prepare_tools().await });
         let reader = engine.clone();
         tokio::spawn(async move { reader.scan_loop().await });
+        let updater = engine.clone();
+        tokio::spawn(async move { updater.update_loop().await });
         Ok(engine)
     }
 
@@ -255,6 +263,7 @@ impl Engine {
             platform: std::env::consts::OS.into(),
             local_folders: self.local_folders().iter().map(|f| f.to_string_lossy().into_owned()).collect(),
             local: *self.local.lock().unwrap(),
+            update: self.update.lock().unwrap().clone(),
         }
     }
 
@@ -358,6 +367,46 @@ impl Engine {
         let status = self.tools.status().await;
         self.report_tools(ToolsReport { status: status.clone(), ..Default::default() });
         Ok(status)
+    }
+
+    // Updates
+
+    /// Looks for a newer release once a day; what the last look found shows until the next.
+    async fn update_loop(self: Arc<Self>) {
+        let current = env!("CARGO_PKG_VERSION");
+        if !update::is_release_build(current) {
+            return;
+        }
+        if let Some(version) = self.db.kv_get("update_latest").ok().flatten() {
+            if update::is_newer(&version, current) {
+                self.set_update(Some(Update { version, url: update::RELEASE_PAGE.into() }));
+            }
+        }
+        loop {
+            let last: i64 =
+                self.db.kv_get("update_checked_at").ok().flatten().and_then(|v| v.parse().ok()).unwrap_or(0);
+            let wait = (last + 24 * 3600 * 1000 - now_ms()).max(30_000) as u64;
+            tokio::time::sleep(Duration::from_millis(wait)).await;
+            if let Err(e) = self.check_update().await {
+                log::info!("update check failed: {e:#}");
+                let _ = self.db.kv_set("update_checked_at", &now_ms().to_string());
+            }
+        }
+    }
+
+    pub async fn check_update(&self) -> Result<Option<Update>> {
+        let found = update::check(&self.http, env!("CARGO_PKG_VERSION")).await?;
+        let _ = self.db.kv_set("update_checked_at", &now_ms().to_string());
+        let _ = self.db.kv_set("update_latest", found.as_ref().map(|u| u.version.as_str()).unwrap_or(""));
+        self.set_update(found.clone());
+        Ok(found)
+    }
+
+    fn set_update(&self, found: Option<Update>) {
+        *self.update.lock().unwrap() = found.clone();
+        if let Some(found) = found {
+            self.emit(Event::Update(found));
+        }
     }
 
     // Songs already on the computer

@@ -12,6 +12,7 @@ import type {
   SyncStatus,
   ToolsReport,
   ToolsStatus,
+  Update,
 } from "./types";
 
 /** Everything the interface asks the engine. The Tauri build talks to Rust; a browser preview
@@ -51,6 +52,8 @@ export interface Backend {
   lyrics(id: string): Promise<Lyrics | null>;
   openLibraryFolder(): Promise<void>;
   libraryRescan(): Promise<void>;
+  updateCheck(): Promise<Update | null>;
+  updateOpen(): Promise<void>;
   pickFolder(current: string): Promise<string | null>;
   pickCookieFile(): Promise<string | null>;
   tourMark(name: string): Promise<boolean>;
@@ -115,6 +118,8 @@ async function tauriBackend(): Promise<Backend> {
     lyrics: (id) => invoke("lyrics", { id }),
     openLibraryFolder: () => invoke("open_library_folder"),
     libraryRescan: () => invoke("library_rescan"),
+    updateCheck: () => invoke("update_check"),
+    updateOpen: () => invoke("update_open"),
     pickFolder: async (current) => {
       const picked = await open({ directory: true, defaultPath: current || undefined, title: "Onde guardar a biblioteca" });
       return typeof picked === "string" ? picked : null;

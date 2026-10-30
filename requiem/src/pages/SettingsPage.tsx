@@ -452,12 +452,42 @@ function EngineSection() {
 
 function About() {
   const overview = useLibrary((s) => s.overview);
+  const update = useLibrary((s) => s.update);
+  const [checking, setChecking] = useState(false);
+  const check = async () => {
+    setChecking(true);
+    const api = await backend();
+    try {
+      const found = await api.updateCheck();
+      if (found) {
+        useLibrary.setState({ update: found });
+        toast(`A versão ${found.version} está disponível.`, "info", { label: "Baixar", run: () => void api.updateOpen() });
+      } else {
+        toast("Você já está na versão mais nova.");
+      }
+    } catch (e) {
+      toast(String(e), "error");
+    } finally {
+      setChecking(false);
+    }
+  };
   return (
     <div className="space-y-3 py-4 text-[15px] text-muted-foreground">
-      <p>
-        <span className="font-display text-2xl font-semibold text-foreground">Requiem</span>
-        <span className="ml-2 text-sm tabular-nums">versão {overview?.version}</span>
-      </p>
+      <div className="flex flex-wrap items-center gap-4">
+        <p>
+          <span className="font-display text-2xl font-semibold text-foreground">Requiem</span>
+          <span className="ml-2 text-sm tabular-nums">versão {overview?.version}</span>
+        </p>
+        {update ? (
+          <Button variant="primary" size="sm" onClick={async () => (await backend()).updateOpen()}>
+            Baixar a versão {update.version}
+          </Button>
+        ) : (
+          <Button size="sm" icon={<ArrowClockwise className="h-4 w-4" />} disabled={checking} onClick={() => void check()}>
+            {checking ? "Procurando" : "Procurar atualização"}
+          </Button>
+        )}
+      </div>
       <p>Feito com yt-dlp, FFmpeg e Deno. As letras vêm do LRCLIB, um acervo aberto e comunitário.</p>
       <p>Guarde só o que você tem direito de guardar. Quem faz a música agradece quando você também ouve nos canais oficiais.</p>
       {overview?.dataDir && (

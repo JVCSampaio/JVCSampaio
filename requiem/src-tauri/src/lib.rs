@@ -143,6 +143,8 @@ pub fn run() {
             commands::lyrics,
             commands::open_library_folder,
             commands::library_rescan,
+            commands::update_check,
+            commands::update_open,
             commands::tour_mark,
             login::account_login,
         ])

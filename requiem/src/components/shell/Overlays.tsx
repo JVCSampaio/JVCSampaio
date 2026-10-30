@@ -1,6 +1,6 @@
-import { ArrowClockwise, HourglassMedium, WarningCircle, X } from "@phosphor-icons/react";
+import { ArrowCircleUp, ArrowClockwise, HourglassMedium, WarningCircle, X } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { ProgressBar, TextField } from "@/components/ui/Controls";
 import { Dialog } from "@/components/ui/Dialog";
 import { backend } from "@/lib/backend";
@@ -9,6 +9,47 @@ import { useDialogs } from "@/state/dialogs";
 import { useLibrary } from "@/state/library";
 import { go } from "@/state/router";
 import { toast, useToasts } from "@/state/toasts";
+
+const DISMISSED = "requiem.update.dismissed";
+
+/** A newer version is published: one line with the way to get it, until the person says no. */
+export function UpdateBanner() {
+  const update = useLibrary((s) => s.update);
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(DISMISSED);
+    } catch {
+      return null;
+    }
+  });
+  if (!update || dismissed === update.version) return null;
+  return (
+    <div className="mx-8 mt-6 flex items-center gap-4 rounded-surface border border-border bg-card px-5 py-4">
+      <ArrowCircleUp weight="duotone" className="h-9 w-9 shrink-0 text-primary" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-medium text-foreground">Nova versão do Requiem: {update.version}</p>
+        <p className="text-[13px] text-muted-foreground">Baixe e instale por cima. Músicas, playlists e ajustes continuam.</p>
+      </div>
+      <Button variant="primary" onClick={async () => (await backend()).updateOpen().catch((e) => toast(String(e), "error"))}>
+        Baixar
+      </Button>
+      <IconButton
+        label="Agora não"
+        size="sm"
+        onClick={() => {
+          try {
+            localStorage.setItem(DISMISSED, update.version);
+          } catch {
+            // Without storage the notice simply comes back next time.
+          }
+          setDismissed(update.version);
+        }}
+      >
+        <X className="h-4 w-4" />
+      </IconButton>
+    </div>
+  );
+}
 
 /** The first run downloads the engine. Nothing is blocked: the library still plays. */
 export function ToolsBanner() {

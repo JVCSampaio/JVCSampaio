@@ -6,6 +6,7 @@ use requiem_core::lyrics::Lyrics;
 use requiem_core::media::{Entry, Kind};
 use requiem_core::settings::Settings;
 use requiem_core::tools::ToolsStatus;
+use requiem_core::update::{self, Update};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
@@ -216,6 +217,21 @@ pub fn open_library_folder(app: AppHandle, state: State<'_, AppState>) -> Res<()
 #[tauri::command]
 pub fn library_rescan(state: State<'_, AppState>) {
     state.engine.rescan();
+}
+
+#[tauri::command]
+pub async fn update_check(state: State<'_, AppState>) -> Res<Option<Update>> {
+    state
+        .engine
+        .check_update()
+        .await
+        .map_err(|_| "Não deu para procurar atualização agora. Confira a internet.".to_string())
+}
+
+/// Opens the release page in the browser, and only that page.
+#[tauri::command]
+pub fn update_open(app: AppHandle) -> Res<()> {
+    app.opener().open_url(update::RELEASE_PAGE, None::<&str>).map_err(msg)
 }
 
 /// The CI screenshot tour: the interface walks its screens and prints a mark at each one, and
