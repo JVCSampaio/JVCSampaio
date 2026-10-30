@@ -6,9 +6,11 @@ import type {
   Kind,
   Lyrics,
   Overview,
+  Play,
   Playlist,
   Resolved,
   Settings,
+  Stats,
   SyncStatus,
   ToolsReport,
   ToolsStatus,
@@ -25,7 +27,14 @@ export interface Backend {
   library(): Promise<Item[]>;
   queue(): Promise<Item[]>;
   playlists(): Promise<Playlist[]>;
-  itemPlayed(id: string): Promise<void>;
+  /** Counts a play; the answer identifies it for playSeconds. */
+  itemPlayed(id: string): Promise<number>;
+  playSeconds(play: number, seconds: number): Promise<void>;
+  itemLike(id: string, liked: boolean): Promise<void>;
+  itemResume(id: string, seconds: number | null): Promise<void>;
+  itemEdit(id: string, title: string, artist: string, album: string | null): Promise<void>;
+  history(limit: number): Promise<Play[]>;
+  stats(since: number): Promise<Stats>;
   itemDelete(id: string, deleteFiles: boolean): Promise<void>;
   itemReveal(id: string): Promise<void>;
   search(query: string, kind: Kind): Promise<Entry[]>;
@@ -92,6 +101,12 @@ async function tauriBackend(): Promise<Backend> {
     queue: () => invoke("queue"),
     playlists: () => invoke("playlists"),
     itemPlayed: (id) => invoke("item_played", { id }),
+    playSeconds: (play, seconds) => invoke("play_seconds", { play, seconds }),
+    itemLike: (id, liked) => invoke("item_like", { id, liked }),
+    itemResume: (id, seconds) => invoke("item_resume", { id, seconds }),
+    itemEdit: (id, title, artist, album) => invoke("item_edit", { id, title, artist, album }),
+    history: (limit) => invoke("history", { limit }),
+    stats: (since) => invoke("stats", { since }),
     itemDelete: (id, deleteFiles) => invoke("item_delete", { id, deleteFiles }),
     itemReveal: (id) => invoke("item_reveal", { id }),
     search: (query, kind) => invoke("search", { query, kind }),

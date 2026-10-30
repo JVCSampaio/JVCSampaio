@@ -25,6 +25,33 @@ export interface Item {
   downloadedAt: number | null;
   playCount: number;
   lastPlayedAt: number | null;
+  likedAt: number | null;
+  trackNumber: number | null;
+  discNumber: number | null;
+  year: number | null;
+  /** Integrated loudness (LUFS) and sample peak (dBFS), once measured. */
+  loudness: number | null;
+  peak: number | null;
+  /** Where a long item was left, in seconds. */
+  resumeAt: number | null;
+}
+
+export interface Play {
+  id: number;
+  itemId: string;
+  playedAt: number;
+  seconds: number;
+}
+
+/** The Retrospectiva of a period. Top lists are [id or artist, plays, seconds]. */
+export interface Stats {
+  plays: number;
+  seconds: number;
+  songs: number;
+  artists: number;
+  topItems: [string, number, number][];
+  topArtists: [string, number, number][];
+  topHour: number | null;
 }
 
 export interface Entry {

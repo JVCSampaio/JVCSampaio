@@ -1,6 +1,6 @@
 //! The commands the interface calls. Errors travel as the sentence shown to the person.
 
-use requiem_core::db::{Item, Playlist};
+use requiem_core::db::{Item, Play, Playlist, Stats};
 use requiem_core::engine::{AccountTest, Overview, Resolved, SyncStatus, ToolsReport};
 use requiem_core::lyrics::Lyrics;
 use requiem_core::media::{Entry, Kind};
@@ -66,8 +66,44 @@ pub fn playlists(state: State<'_, AppState>) -> Res<Vec<Playlist>> {
 }
 
 #[tauri::command]
-pub fn item_played(state: State<'_, AppState>, id: String) -> Res<()> {
+pub fn item_played(state: State<'_, AppState>, id: String) -> Res<i64> {
     state.engine.played(&id).map_err(msg)
+}
+
+#[tauri::command]
+pub fn play_seconds(state: State<'_, AppState>, play: i64, seconds: f64) -> Res<()> {
+    state.engine.play_seconds(play, seconds).map_err(msg)
+}
+
+#[tauri::command]
+pub fn item_like(state: State<'_, AppState>, id: String, liked: bool) -> Res<()> {
+    state.engine.like(&id, liked).map_err(msg)
+}
+
+#[tauri::command]
+pub fn item_resume(state: State<'_, AppState>, id: String, seconds: Option<f64>) -> Res<()> {
+    state.engine.resume(&id, seconds).map_err(msg)
+}
+
+#[tauri::command]
+pub fn item_edit(
+    state: State<'_, AppState>,
+    id: String,
+    title: String,
+    artist: String,
+    album: Option<String>,
+) -> Res<()> {
+    state.engine.edit_info(&id, &title, &artist, album.as_deref()).map_err(msg)
+}
+
+#[tauri::command]
+pub fn history(state: State<'_, AppState>, limit: i64) -> Res<Vec<Play>> {
+    state.engine.history(limit).map_err(msg)
+}
+
+#[tauri::command]
+pub fn stats(state: State<'_, AppState>, since: i64) -> Res<Stats> {
+    state.engine.stats(since).map_err(msg)
 }
 
 #[tauri::command]

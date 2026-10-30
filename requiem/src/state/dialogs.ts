@@ -3,6 +3,7 @@ import type { Item, Playlist } from "@/lib/types";
 
 export type DialogRequest =
   | { type: "delete"; item: Item }
+  | { type: "edit"; item: Item }
   | { type: "newPlaylist"; itemIds: string[] }
   | { type: "renamePlaylist"; playlist: Playlist }
   | { type: "deletePlaylist"; playlist: Playlist };

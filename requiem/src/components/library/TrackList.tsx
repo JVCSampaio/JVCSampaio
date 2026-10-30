@@ -8,6 +8,7 @@ import type { Item, Playlist } from "@/lib/types";
 import { useLibrary } from "@/state/library";
 import { coverUrl, playList, usePlayer } from "@/state/player";
 import { itemMenu } from "./itemMenu";
+import { LikeButton } from "./LikeButton";
 
 const ROW = 56;
 
@@ -103,7 +104,9 @@ export function TrackList({
 
   const ids = items.map((i) => i.id);
   const wide = items.some((i) => i.kind === "video");
-  const cols = showAlbum ? "grid-cols-[36px_minmax(0,1.7fr)_minmax(0,1fr)_64px_36px]" : "grid-cols-[36px_minmax(0,1fr)_64px_36px]";
+  const cols = showAlbum
+    ? "grid-cols-[36px_minmax(0,1.7fr)_minmax(0,1fr)_32px_56px_36px]"
+    : "grid-cols-[36px_minmax(0,1fr)_32px_56px_36px]";
 
   return (
     <div>
@@ -111,6 +114,7 @@ export function TrackList({
         <span className="text-right tabular-nums">#</span>
         <HeaderCell label="Título" sortKey="title" sort={sort} onSort={onSort} />
         {showAlbum && <HeaderCell label="Álbum" sortKey="album" sort={sort} onSort={onSort} />}
+        <span />
         <HeaderCell label={<Clock className="h-4 w-4" aria-label="Duração" />} sortKey="duration" sort={sort} onSort={onSort} end />
         <span />
       </div>
@@ -151,6 +155,9 @@ export function TrackList({
                   </div>
                 </div>
                 {showAlbum && <div className="truncate text-[13px] text-muted-foreground">{item.album ?? ""}</div>}
+                <span className="flex justify-end">
+                  <LikeButton item={item} reveal />
+                </span>
                 <span className="text-right text-[13px] tabular-nums text-muted-foreground">{duration(item.duration)}</span>
                 <span className="flex justify-end">
                   <Dropdown

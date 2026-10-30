@@ -97,6 +97,39 @@ let loadedId: string | null = null;
 let pendingSeek: number | null = null;
 let counted: string | null = null;
 
+// The listening log: seconds really heard per play (seeks do not count), and where a long item
+// (a podcast, a lecture) was left, to start there next time.
+const LONG_ITEM = 20 * 60;
+let playId: number | null = null;
+let heard = 0;
+let lastPosition = 0;
+let lastReport = 0;
+let lastResumeSave = 0;
+const resumeAt = new Map<string, number | null>();
+
+function reportHeard() {
+  if (playId == null || heard <= 0) return;
+  const play = playId;
+  const seconds = Math.round(heard);
+  void backend().then((api) => api.playSeconds(play, seconds));
+}
+
+function saveResume(id: string, position: number, total: number) {
+  if (total <= LONG_ITEM) return;
+  const value = position > 10 && position < total - 30 ? Math.round(position) : null;
+  if (resumeAt.get(id) === value) return;
+  resumeAt.set(id, value);
+  void backend().then((api) => api.itemResume(id, value));
+}
+
+function startListening() {
+  reportHeard();
+  playId = null;
+  heard = 0;
+  lastPosition = 0;
+  counted = null;
+}
+
 async function load(autoplay: boolean) {
   const id = currentId();
   const item = itemById(id);
@@ -108,8 +141,11 @@ async function load(autoplay: boolean) {
     return;
   }
   if (loadedId !== id) {
+    if (loadedId) saveResume(loadedId, media.currentTime, media.duration || 0);
     loadedId = id;
-    counted = null;
+    startListening();
+    const saved = resumeAt.has(id) ? resumeAt.get(id) : item.resumeAt;
+    if (pendingSeek == null && saved && (item.duration ?? 0) > LONG_ITEM) pendingSeek = saved;
     const url = mediaUrl(id) || (await mockSource(item));
     media.src = url;
     set({ position: 0, duration: item.duration ?? 0, buffering: true });
@@ -309,7 +345,12 @@ export async function installPlayer() {
   installed = true;
 
   media.addEventListener("play", () => set({ playing: true }));
-  media.addEventListener("pause", () => set({ playing: false }));
+  media.addEventListener("pause", () => {
+    set({ playing: false });
+    reportHeard();
+    const id = currentId();
+    if (id) saveResume(id, media.currentTime, media.duration || 0);
+  });
   media.addEventListener("waiting", () => set({ buffering: true }));
   media.addEventListener("playing", () => set({ buffering: false }));
   media.addEventListener("canplay", () => set({ buffering: false }));
@@ -325,14 +366,35 @@ export async function installPlayer() {
   media.addEventListener("timeupdate", () => {
     const position = media.currentTime;
     set({ position });
+    const step = position - lastPosition;
+    if (!media.paused && step > 0 && step < 1.5) heard += step;
+    lastPosition = position;
     const id = currentId();
     const threshold = Math.min(30, (media.duration || 60) * 0.5);
     if (id && counted !== id && position >= threshold) {
       counted = id;
-      void backend().then((api) => api.itemPlayed(id));
+      void backend()
+        .then((api) => api.itemPlayed(id))
+        .then((play) => {
+          if (currentId() === id) playId = play;
+        });
+    }
+    const now = Date.now();
+    if (playId != null && now - lastReport > 15_000) {
+      lastReport = now;
+      reportHeard();
+    }
+    if (id && now - lastResumeSave > 10_000) {
+      lastResumeSave = now;
+      saveResume(id, position, media.duration || 0);
     }
   });
-  media.addEventListener("ended", () => next(true));
+  media.addEventListener("ended", () => {
+    const id = currentId();
+    if (id) saveResume(id, media.duration || 0, media.duration || 0);
+    reportHeard();
+    next(true);
+  });
   media.addEventListener("error", () => {
     if (!media.getAttribute("src")) return;
     set({ playing: false, buffering: false });

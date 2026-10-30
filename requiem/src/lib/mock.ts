@@ -3,7 +3,7 @@
 
 import type { Backend } from "./backend";
 import { mockArt } from "./mockArt";
-import type { EngineEvent, Entry, Item, Kind, Lyrics, Playlist, Settings, SyncStatus, ToolsStatus } from "./types";
+import type { EngineEvent, Entry, Item, Kind, Lyrics, Play, Playlist, Settings, Stats, SyncStatus, ToolsStatus } from "./types";
 
 const DAY = 86_400_000;
 const now = Date.now();
@@ -71,8 +71,24 @@ function seedItem([id, kind, title, artist, album, duration, daysAgo, plays]: Se
     downloadedAt: at,
     playCount: plays,
     lastPlayedAt: plays ? at + DAY / 3 : null,
+    likedAt: plays >= 9 ? at + DAY / 2 : null,
+    trackNumber: trackNumbers[id] ?? null,
+    discNumber: trackNumbers[id] ? 1 : null,
+    year: album ? 1950 + (title.length % 60) : null,
+    loudness: null,
+    peak: null,
+    resumeAt: null,
   };
 }
+
+/** Album order for the songs of "Lua Minguante" and "Vigília", out of download order on purpose. */
+const trackNumbers: Record<string, number> = {
+  campanas016: 1,
+  velas000015: 2,
+  "local-0000000000000005": 3,
+  corvo000014: 1,
+  neblina0013: 2,
+};
 
 const pendingSeeds: Array<Partial<Item> & Pick<Item, "id" | "title" | "artist" | "status">> = [
   { id: "pend0000001", title: "Carmina Burana, O Fortuna", artist: "Carl Orff", status: "downloading", kind: "music", duration: 158 },
@@ -107,9 +123,26 @@ export function createMockBackend(): Backend {
       downloadedAt: null,
       playCount: 0,
       lastPlayedAt: null,
+      likedAt: null,
+      trackNumber: null,
+      discNumber: null,
+      year: null,
+      loudness: null,
+      peak: null,
+      resumeAt: null,
       ...p,
     } as Item);
   });
+
+  // A play log that matches the play counts, spread over the last two months.
+  const plays: Play[] = [];
+  let nextPlay = 1;
+  for (const it of items.values()) {
+    for (let k = 0; k < it.playCount; k++) {
+      const playedAt = now - ((k * 7 + it.title.length * 3) % 60) * DAY - (k % 5) * 3_600_000;
+      plays.push({ id: nextPlay++, itemId: it.id, playedAt, seconds: Math.round((it.duration ?? 200) * (0.6 + ((k * 13) % 40) / 100)) });
+    }
+  }
 
   let playlists: Playlist[] = [
     { id: 1, name: "Vigília das três da manhã", itemIds: ["gymnope0011", "nocturne008", "neblina0013", "valsetr0012", "lacrimosa06"], createdAt: now - 20 * DAY },
@@ -212,6 +245,13 @@ export function createMockBackend(): Backend {
     downloadedAt: null,
     playCount: 0,
     lastPlayedAt: null,
+    likedAt: null,
+    trackNumber: null,
+    discNumber: null,
+    year: null,
+    loudness: null,
+    peak: null,
+    resumeAt: null,
   });
 
   const lyrics: Lyrics = {
@@ -261,7 +301,32 @@ export function createMockBackend(): Backend {
         it.lastPlayedAt = Date.now();
         emit({ type: "item", item: { ...it } });
       }
+      const play = { id: nextPlay++, itemId: id, playedAt: Date.now(), seconds: 0 };
+      plays.push(play);
+      return play.id;
     },
+    playSeconds: async (playId, seconds) => {
+      const play = plays.find((p) => p.id === playId);
+      if (play) play.seconds = Math.max(play.seconds, seconds);
+    },
+    itemLike: async (id, liked) => {
+      const it = items.get(id);
+      if (!it) return;
+      it.likedAt = liked ? it.likedAt ?? Date.now() : null;
+      emit({ type: "item", item: { ...it } });
+    },
+    itemResume: async (id, seconds) => {
+      const it = items.get(id);
+      if (it) it.resumeAt = seconds;
+    },
+    itemEdit: async (id, title, artist, album) => {
+      const it = items.get(id);
+      if (!it) return;
+      Object.assign(it, { title: title.trim(), artist: artist.trim(), album: album?.trim() || null });
+      emit({ type: "item", item: { ...it } });
+    },
+    history: (limit) => wait([...plays].filter((p) => items.get(p.itemId)?.status === "done").sort((a, b) => b.playedAt - a.playedAt).slice(0, limit), 120),
+    stats: (since) => wait(mockStats(plays, items, since), 200),
     itemDelete: async (id) => {
       items.delete(id);
       playlists = playlists.map((p) => ({ ...p, itemIds: p.itemIds.filter((x) => x !== id) }));
@@ -382,5 +447,34 @@ export function createMockBackend(): Backend {
     },
     onTray: () => () => {},
     setFullscreen: () => wait(undefined, 0),
+  };
+}
+
+function mockStats(plays: Play[], items: Map<string, Item>, since: number): Stats {
+  const recent = plays.filter((p) => p.playedAt >= since && items.get(p.itemId)?.status === "done");
+  const byItem = new Map<string, [number, number]>();
+  const byArtist = new Map<string, [string, number, number]>();
+  const byHour = new Map<number, number>();
+  for (const p of recent) {
+    const it = items.get(p.itemId)!;
+    const [n, sec] = byItem.get(p.itemId) ?? [0, 0];
+    byItem.set(p.itemId, [n + 1, sec + p.seconds]);
+    if (it.kind === "music" && it.artist) {
+      const key = it.artist.toLowerCase();
+      const [name, an, as] = byArtist.get(key) ?? [it.artist, 0, 0];
+      byArtist.set(key, [name, an + 1, as + p.seconds]);
+    }
+    const hour = new Date(p.playedAt).getHours();
+    byHour.set(hour, (byHour.get(hour) ?? 0) + p.seconds);
+  }
+  const rank = <T extends [unknown, number, number]>(a: T, b: T) => b[1] - a[1] || b[2] - a[2];
+  return {
+    plays: recent.length,
+    seconds: recent.reduce((s, p) => s + p.seconds, 0),
+    songs: byItem.size,
+    artists: byArtist.size,
+    topItems: [...byItem].map(([id, [n, sec]]) => [id, n, sec] as [string, number, number]).sort(rank).slice(0, 20),
+    topArtists: [...byArtist.values()].sort(rank).slice(0, 10),
+    topHour: byHour.size ? [...byHour].sort((a, b) => b[1] - a[1])[0][0] : null,
   };
 }

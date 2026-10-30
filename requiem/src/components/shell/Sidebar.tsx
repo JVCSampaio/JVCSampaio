@@ -3,11 +3,13 @@ import {
   DownloadSimple,
   GearSix,
   Ghost,
+  Heart,
   House,
   MagnifyingGlass,
   MoonStars,
   Plus,
   Skull,
+  Sparkle,
   WarningCircle,
 } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
@@ -48,6 +50,7 @@ export function Sidebar() {
   const sync = useLibrary((s) => s.sync);
   const settings = useLibrary((s) => s.settings);
   const active = Object.values(items).filter((i) => i.status === "downloading" || i.status === "queued").length;
+  const liked = Object.values(items).filter((i) => i.status === "done" && i.likedAt).length;
   const connected = isAccountConnected(settings);
 
   return (
@@ -73,6 +76,12 @@ export function Sidebar() {
           onClick={() => go({ name: "library" })}
         />
         <NavItem
+          icon={<Sparkle weight={routeIs(route, "stats") ? "fill" : "regular"} />}
+          label="Retrospectiva"
+          active={routeIs(route, "stats")}
+          onClick={() => go({ name: "stats" })}
+        />
+        <NavItem
           icon={<DownloadSimple weight={routeIs(route, "downloads") ? "bold" : "regular"} />}
           label="Downloads"
           active={routeIs(route, "downloads")}
@@ -89,6 +98,19 @@ export function Sidebar() {
         </IconButton>
       </div>
       <div className="mt-1 min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+        <button
+          type="button"
+          onClick={() => go({ name: "liked" })}
+          className={cn(
+            "flex h-9 w-full items-center gap-2 rounded-control px-3 text-left text-[15px]",
+            "transition-[background-color,color] [transition-duration:var(--dur-fast)]",
+            route.name === "liked" ? "bg-raised text-foreground" : "text-muted-foreground hover:bg-raised/60 hover:text-foreground",
+          )}
+        >
+          <Heart weight="fill" className="h-4 w-4 shrink-0 text-primary" />
+          <span className="flex-1 truncate">Curtidas</span>
+          {liked > 0 && <span className="text-[13px] tabular-nums text-faint-foreground">{liked}</span>}
+        </button>
         {playlists.map((p) => {
           const on = route.name === "playlist" && route.id === p.id;
           return (

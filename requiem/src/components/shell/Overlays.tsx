@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { backend } from "@/lib/backend";
 import { cn, percent } from "@/lib/format";
 import { useDialogs } from "@/state/dialogs";
+import type { Item } from "@/lib/types";
 import { useLibrary } from "@/state/library";
 import { go } from "@/state/router";
 import { toast, useToasts } from "@/state/toasts";
@@ -169,6 +170,8 @@ export function DialogsHost() {
     );
   }
 
+  if (open.type === "edit") return <EditInfoDialog key={open.item.id} item={open.item} onClose={close} />;
+
   if (open.type === "deletePlaylist") {
     const { playlist } = open;
     return (
@@ -223,6 +226,57 @@ export function DialogsHost() {
           </Button>
           <Button type="submit" variant="primary" disabled={!name.trim() || busy}>
             {renaming ? "Salvar" : "Criar"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** The person's own names for a song, for when YouTube or the tags got them wrong. */
+function EditInfoDialog({ item, onClose }: { item: Item; onClose: () => void }) {
+  const [title, setTitle] = useState(item.title);
+  const [artist, setArtist] = useState(item.artist);
+  const [album, setAlbum] = useState(item.album ?? "");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!title.trim()) return;
+    setBusy(true);
+    try {
+      await (await backend()).itemEdit(item.id, title, artist, album.trim() || null);
+      onClose();
+    } catch (e) {
+      toast(String(e), "error");
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()} title="Editar informações" description="Vale só no Requiem. O arquivo continua como está.">
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <label className="block text-[13px] text-muted-foreground">
+          Título
+          <TextField autoFocus className="mt-1" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
+        </label>
+        <label className="block text-[13px] text-muted-foreground">
+          Artista
+          <TextField className="mt-1" value={artist} onChange={(e) => setArtist(e.target.value)} maxLength={200} />
+        </label>
+        <label className="block text-[13px] text-muted-foreground">
+          Álbum
+          <TextField className="mt-1" value={album} onChange={(e) => setAlbum(e.target.value)} maxLength={200} />
+        </label>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" disabled={!title.trim() || busy}>
+            Salvar
           </Button>
         </div>
       </form>

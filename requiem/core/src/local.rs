@@ -177,6 +177,9 @@ fn read(
         thumb_path: None,
         file_size: size,
         modified,
+        track_number: None,
+        disc_number: None,
+        year: None,
     };
 
     if let Ok(tagged) = lofty::read_from_path(path) {
@@ -195,6 +198,9 @@ fn read(
                 file.artist = artist;
             }
             file.album = text(tag.album());
+            file.track_number = tag.track().map(i64::from);
+            file.disc_number = tag.disk().map(i64::from);
+            file.year = tag.date().map(|d| i64::from(d.year)).filter(|y| *y > 0);
             let pictures = tag.pictures();
             let picture =
                 pictures.iter().find(|p| p.pic_type() == PictureType::CoverFront).or_else(|| pictures.first());

@@ -61,6 +61,10 @@ pub struct Info {
     pub width: Option<i64>,
     pub height: Option<i64>,
     pub availability: Option<String>,
+    /// YouTube Music fills these for songs from an album.
+    pub track_number: Option<i64>,
+    pub disc_number: Option<i64>,
+    pub release_year: Option<i64>,
 }
 
 impl Info {

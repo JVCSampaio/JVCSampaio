@@ -36,6 +36,15 @@ pub struct Item {
     pub downloaded_at: Option<i64>,
     pub play_count: i64,
     pub last_played_at: Option<i64>,
+    pub liked_at: Option<i64>,
+    pub track_number: Option<i64>,
+    pub disc_number: Option<i64>,
+    pub year: Option<i64>,
+    /// Integrated loudness in LUFS and sample peak in dBFS, for even volume between songs.
+    pub loudness: Option<f64>,
+    pub peak: Option<f64>,
+    /// Where a long item (a podcast, a lecture) was left, in seconds.
+    pub resume_at: Option<f64>,
 }
 
 /// A row found by the sync or asked for by the person, before the download.
@@ -66,6 +75,9 @@ pub struct Finished {
     pub file_size: Option<i64>,
     pub width: Option<i64>,
     pub height: Option<i64>,
+    pub track_number: Option<i64>,
+    pub disc_number: Option<i64>,
+    pub year: Option<i64>,
 }
 
 /// A song or video already on the computer, found in one of the person's folders.
@@ -82,6 +94,35 @@ pub struct LocalFile {
     pub file_size: i64,
     /// The file's modification time, in ms. With the size, it tells a changed file.
     pub modified: i64,
+    pub track_number: Option<i64>,
+    pub disc_number: Option<i64>,
+    pub year: Option<i64>,
+}
+
+/// One time a song or video was played past the counting point.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Play {
+    pub id: i64,
+    pub item_id: String,
+    pub played_at: i64,
+    pub seconds: f64,
+}
+
+/// What the person listened to since a moment: the Retrospectiva.
+#[derive(Debug, Clone, Default, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Stats {
+    pub plays: i64,
+    pub seconds: f64,
+    pub songs: i64,
+    pub artists: i64,
+    /// Item id, plays, seconds.
+    pub top_items: Vec<(String, i64, f64)>,
+    /// Artist, plays, seconds.
+    pub top_artists: Vec<(String, i64, f64)>,
+    /// The hour of the day (0-23, local time) with the most listening.
+    pub top_hour: Option<i64>,
 }
 
 /// What the library knows about a local file, removed ones included.
@@ -108,31 +149,39 @@ pub struct Db {
 }
 
 const ITEM_COLUMNS: &str = "id, kind, title, artist, album, channel, duration, source, status, error, file_path, \
-    thumb_path, thumbnail_url, file_size, width, height, added_at, seen_at, downloaded_at, play_count, last_played_at";
+    thumb_path, thumbnail_url, file_size, width, height, added_at, seen_at, downloaded_at, play_count, last_played_at, \
+    liked_at, track_number, disc_number, year, loudness, peak, resume_at";
 
 fn item_from_row(r: &Row) -> rusqlite::Result<Item> {
     Ok(Item {
-        id: r.get(0)?,
-        kind: r.get(1)?,
-        title: r.get(2)?,
-        artist: r.get(3)?,
-        album: r.get(4)?,
-        channel: r.get(5)?,
-        duration: r.get(6)?,
-        source: r.get(7)?,
-        status: r.get(8)?,
-        error: r.get(9)?,
-        file_path: r.get(10)?,
-        thumb_path: r.get(11)?,
-        thumbnail_url: r.get(12)?,
-        file_size: r.get(13)?,
-        width: r.get(14)?,
-        height: r.get(15)?,
-        added_at: r.get(16)?,
-        seen_at: r.get(17)?,
-        downloaded_at: r.get(18)?,
-        play_count: r.get(19)?,
-        last_played_at: r.get(20)?,
+        id: r.get("id")?,
+        kind: r.get("kind")?,
+        title: r.get("title")?,
+        artist: r.get("artist")?,
+        album: r.get("album")?,
+        channel: r.get("channel")?,
+        duration: r.get("duration")?,
+        source: r.get("source")?,
+        status: r.get("status")?,
+        error: r.get("error")?,
+        file_path: r.get("file_path")?,
+        thumb_path: r.get("thumb_path")?,
+        thumbnail_url: r.get("thumbnail_url")?,
+        file_size: r.get("file_size")?,
+        width: r.get("width")?,
+        height: r.get("height")?,
+        added_at: r.get("added_at")?,
+        seen_at: r.get("seen_at")?,
+        downloaded_at: r.get("downloaded_at")?,
+        play_count: r.get("play_count")?,
+        last_played_at: r.get("last_played_at")?,
+        liked_at: r.get("liked_at")?,
+        track_number: r.get("track_number")?,
+        disc_number: r.get("disc_number")?,
+        year: r.get("year")?,
+        loudness: r.get("loudness")?,
+        peak: r.get("peak")?,
+        resume_at: r.get("resume_at")?,
     })
 }
 
@@ -147,6 +196,7 @@ impl Db {
 
     pub fn in_memory() -> Result<Db> {
         let conn = Connection::open_in_memory()?;
+        conn.pragma_update(None, "foreign_keys", "ON")?;
         Self::migrate(&conn)?;
         Ok(Db { conn: Mutex::new(conn) })
     }
@@ -194,6 +244,33 @@ impl Db {
                 );
                 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
                 PRAGMA user_version = 1;",
+            )?;
+        }
+        if version < 2 {
+            // Likes, album order, even volume and resume; a log of plays for the history and the
+            // Retrospectiva. Local files are read once more to pick up track numbers and years.
+            conn.execute_batch(
+                "BEGIN;
+                ALTER TABLE items ADD COLUMN liked_at INTEGER;
+                ALTER TABLE items ADD COLUMN track_number INTEGER;
+                ALTER TABLE items ADD COLUMN disc_number INTEGER;
+                ALTER TABLE items ADD COLUMN year INTEGER;
+                ALTER TABLE items ADD COLUMN loudness REAL;
+                ALTER TABLE items ADD COLUMN peak REAL;
+                ALTER TABLE items ADD COLUMN loudness_source TEXT;
+                ALTER TABLE items ADD COLUMN analyzed_at INTEGER;
+                ALTER TABLE items ADD COLUMN resume_at REAL;
+                CREATE TABLE plays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+                    played_at INTEGER NOT NULL,
+                    seconds REAL NOT NULL DEFAULT 0
+                );
+                CREATE INDEX plays_item ON plays(item_id, played_at);
+                CREATE INDEX plays_time ON plays(played_at);
+                UPDATE items SET file_size = NULL WHERE source = 'local';
+                PRAGMA user_version = 2;
+                COMMIT;",
             )?;
         }
         Ok(())
@@ -306,11 +383,27 @@ impl Db {
     pub fn finish(&self, id: &str, f: &Finished) -> Result<()> {
         self.lock().execute(
             "UPDATE items SET status = 'done', error = NULL, kind = ?2, title = ?3, artist = ?4, album = ?5, channel = ?6,
-                duration = ?7, file_path = ?8, thumb_path = ?9, file_size = ?10, width = ?11, height = ?12, downloaded_at = ?13
+                duration = ?7, file_path = ?8, thumb_path = ?9, file_size = ?10, width = ?11, height = ?12, downloaded_at = ?13,
+                track_number = ?14, disc_number = ?15, year = ?16, loudness = NULL, peak = NULL, loudness_source = NULL,
+                analyzed_at = NULL
              WHERE id = ?1",
             params![
-                id, f.kind, f.title, f.artist, f.album, f.channel, f.duration, f.file_path, f.thumb_path, f.file_size,
-                f.width, f.height, now_ms()
+                id,
+                f.kind,
+                f.title,
+                f.artist,
+                f.album,
+                f.channel,
+                f.duration,
+                f.file_path,
+                f.thumb_path,
+                f.file_size,
+                f.width,
+                f.height,
+                now_ms(),
+                f.track_number,
+                f.disc_number,
+                f.year
             ],
         )?;
         Ok(())
@@ -391,12 +484,14 @@ impl Db {
     pub fn put_local(&self, f: &LocalFile) -> Result<()> {
         self.lock().execute(
             "INSERT INTO items (id, kind, title, artist, album, channel, duration, source, status, file_path, thumb_path,
-                file_size, added_at, seen_at, downloaded_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?4, ?6, 'local', 'done', ?7, ?8, ?9, ?10, ?11, ?11)
+                file_size, added_at, seen_at, downloaded_at, track_number, disc_number, year)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?4, ?6, 'local', 'done', ?7, ?8, ?9, ?10, ?11, ?11, ?12, ?13, ?14)
              ON CONFLICT(id) DO UPDATE SET
                 kind = excluded.kind, title = excluded.title, artist = excluded.artist, album = excluded.album,
                 channel = excluded.channel, duration = excluded.duration, file_path = excluded.file_path,
-                thumb_path = excluded.thumb_path, file_size = excluded.file_size, downloaded_at = excluded.downloaded_at
+                thumb_path = excluded.thumb_path, file_size = excluded.file_size, downloaded_at = excluded.downloaded_at,
+                track_number = excluded.track_number, disc_number = excluded.disc_number, year = excluded.year,
+                loudness = NULL, peak = NULL, loudness_source = NULL, analyzed_at = NULL
              WHERE items.status = 'done' AND items.source = 'local'",
             params![
                 f.id,
@@ -409,7 +504,10 @@ impl Db {
                 f.thumb_path,
                 f.file_size,
                 now_ms(),
-                f.modified
+                f.modified,
+                f.track_number,
+                f.disc_number,
+                f.year
             ],
         )?;
         Ok(())
@@ -427,12 +525,100 @@ impl Db {
         Ok(())
     }
 
-    pub fn played(&self, id: &str) -> Result<()> {
-        self.lock().execute(
+    /// Counts a play and opens its row in the log; the player reports the seconds later.
+    pub fn played(&self, id: &str) -> Result<i64> {
+        let conn = self.lock();
+        let now = now_ms();
+        conn.execute(
             "UPDATE items SET play_count = play_count + 1, last_played_at = ?2 WHERE id = ?1",
-            params![id, now_ms()],
+            params![id, now],
+        )?;
+        conn.execute("INSERT INTO plays (item_id, played_at, seconds) VALUES (?1, ?2, 0)", params![id, now])?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// How long a play lasted, in seconds actually listened (seeks do not count).
+    pub fn play_seconds(&self, play_id: i64, seconds: f64) -> Result<()> {
+        self.lock().execute("UPDATE plays SET seconds = MAX(seconds, ?2) WHERE id = ?1", params![play_id, seconds])?;
+        Ok(())
+    }
+
+    pub fn like(&self, id: &str, liked: bool) -> Result<()> {
+        self.lock().execute(
+            "UPDATE items SET liked_at = CASE WHEN ?2 THEN COALESCE(liked_at, ?3) ELSE NULL END WHERE id = ?1",
+            params![id, liked, now_ms()],
         )?;
         Ok(())
+    }
+
+    pub fn set_resume(&self, id: &str, seconds: Option<f64>) -> Result<()> {
+        self.lock().execute("UPDATE items SET resume_at = ?2 WHERE id = ?1", params![id, seconds])?;
+        Ok(())
+    }
+
+    /// The person's own names for a song: they win over tags and YouTube until edited again.
+    pub fn edit_info(&self, id: &str, title: &str, artist: &str, album: Option<&str>) -> Result<()> {
+        let album = album.map(str::trim).filter(|a| !a.is_empty());
+        self.lock().execute(
+            "UPDATE items SET title = ?2, artist = ?3, album = ?4 WHERE id = ?1",
+            params![id, title.trim(), artist.trim(), album],
+        )?;
+        Ok(())
+    }
+
+    /// The most recent plays, newest first.
+    pub fn history(&self, limit: i64) -> Result<Vec<Play>> {
+        let conn = self.lock();
+        let mut stmt = conn.prepare(
+            "SELECT p.id, p.item_id, p.played_at, p.seconds FROM plays p JOIN items i ON i.id = p.item_id
+             WHERE i.status = 'done' ORDER BY p.played_at DESC LIMIT ?1",
+        )?;
+        let rows = stmt
+            .query_map([limit], |r| {
+                Ok(Play { id: r.get(0)?, item_id: r.get(1)?, played_at: r.get(2)?, seconds: r.get(3)? })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Plays since `since` (ms): totals, the top songs and artists, the favorite hour.
+    pub fn stats(&self, since: i64) -> Result<Stats> {
+        let conn = self.lock();
+        let (plays, seconds, songs): (i64, f64, i64) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(seconds), 0), COUNT(DISTINCT item_id) FROM plays WHERE played_at >= ?1",
+            [since],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )?;
+        let top_items = conn
+            .prepare(
+                "SELECT p.item_id, COUNT(*) AS n, SUM(p.seconds) AS s FROM plays p JOIN items i ON i.id = p.item_id
+                 WHERE p.played_at >= ?1 AND i.status = 'done' GROUP BY p.item_id ORDER BY n DESC, s DESC LIMIT 20",
+            )?
+            .query_map([since], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let top_artists: Vec<(String, i64, f64)> = conn
+            .prepare(
+                "SELECT MIN(i.artist), COUNT(*) AS n, SUM(p.seconds) AS s FROM plays p JOIN items i ON i.id = p.item_id
+                 WHERE p.played_at >= ?1 AND i.artist <> '' AND i.kind = 'music'
+                 GROUP BY lower(i.artist) ORDER BY n DESC, s DESC LIMIT 10",
+            )?
+            .query_map([since], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let artists: i64 = conn.query_row(
+            "SELECT COUNT(DISTINCT lower(i.artist)) FROM plays p JOIN items i ON i.id = p.item_id
+             WHERE p.played_at >= ?1 AND i.artist <> '' AND i.kind = 'music'",
+            [since],
+            |r| r.get(0),
+        )?;
+        let top_hour: Option<i64> = conn
+            .query_row(
+                "SELECT CAST(strftime('%H', played_at / 1000, 'unixepoch', 'localtime') AS INTEGER) AS h
+                 FROM plays WHERE played_at >= ?1 GROUP BY h ORDER BY SUM(seconds) DESC, COUNT(*) DESC LIMIT 1",
+                [since],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(Stats { plays, seconds, songs, artists, top_items, top_artists, top_hour })
     }
 
     pub fn status_counts(&self) -> Result<Vec<(String, i64)>> {
@@ -579,6 +765,101 @@ mod tests {
             file_path: path.into(),
             ..Default::default()
         }
+    }
+
+    fn done(db: &Db, id: &str, artist: &str) {
+        db.request(&new(id, "search")).unwrap();
+        db.claim_next().unwrap();
+        db.finish(id, &Finished { artist: artist.into(), ..finished(&format!("/m/{id}.m4a")) }).unwrap();
+    }
+
+    /// A database written by version 1 of the app opens, gains the new columns and the play log
+    /// once, keeps its rows, and asks the folder scan to read local files again.
+    #[test]
+    fn migrates_a_version_1_database() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("requiem.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE items (id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL,
+                    artist TEXT NOT NULL DEFAULT '', album TEXT, channel TEXT NOT NULL DEFAULT '', duration REAL,
+                    source TEXT NOT NULL, status TEXT NOT NULL, error TEXT, file_path TEXT, thumb_path TEXT,
+                    thumbnail_url TEXT, file_size INTEGER, width INTEGER, height INTEGER, added_at INTEGER NOT NULL,
+                    seen_at INTEGER, downloaded_at INTEGER, play_count INTEGER NOT NULL DEFAULT 0,
+                    last_played_at INTEGER, priority INTEGER NOT NULL DEFAULT 0, lyrics TEXT);
+                CREATE TABLE playlists (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_at INTEGER NOT NULL);
+                CREATE TABLE playlist_items (playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+                    item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE, position INTEGER NOT NULL,
+                    PRIMARY KEY (playlist_id, item_id));
+                CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                INSERT INTO items (id, kind, title, source, status, file_path, file_size, added_at, play_count)
+                    VALUES ('local-1', 'music', 'Velha', 'local', 'done', '/m/a.mp3', 100, 1, 3),
+                           ('dQw4w9WgXcQ', 'music', 'Baixada', 'search', 'done', '/m/b.m4a', 200, 1, 1);
+                PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let db = Db::open(&path).unwrap();
+        let local = db.get("local-1").unwrap().unwrap();
+        assert_eq!((local.title.as_str(), local.play_count, local.file_size), ("Velha", 3, None));
+        assert_eq!(db.get("dQw4w9WgXcQ").unwrap().unwrap().file_size, Some(200));
+        assert_eq!(local.liked_at, None);
+        drop(db);
+        let db = Db::open(&path).unwrap();
+        let version: i64 = db.lock().pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
+        assert_eq!(version, 2);
+        assert!(db.played("local-1").unwrap() > 0);
+    }
+
+    #[test]
+    fn plays_likes_resume_and_edits() {
+        let db = Db::in_memory().unwrap();
+        done(&db, "aaaaaaaaaaa", "Os Coveiros");
+        let play = db.played("aaaaaaaaaaa").unwrap();
+        db.play_seconds(play, 120.0).unwrap();
+        db.play_seconds(play, 90.0).unwrap();
+        let history = db.history(10).unwrap();
+        assert_eq!((history.len(), history[0].seconds), (1, 120.0));
+
+        db.like("aaaaaaaaaaa", true).unwrap();
+        let first = db.get("aaaaaaaaaaa").unwrap().unwrap().liked_at;
+        assert!(first.is_some());
+        db.like("aaaaaaaaaaa", true).unwrap();
+        assert_eq!(db.get("aaaaaaaaaaa").unwrap().unwrap().liked_at, first);
+        db.like("aaaaaaaaaaa", false).unwrap();
+        assert_eq!(db.get("aaaaaaaaaaa").unwrap().unwrap().liked_at, None);
+
+        db.set_resume("aaaaaaaaaaa", Some(1234.5)).unwrap();
+        assert_eq!(db.get("aaaaaaaaaaa").unwrap().unwrap().resume_at, Some(1234.5));
+
+        db.edit_info("aaaaaaaaaaa", " O Corvo ", "Os Coveiros", Some("  ")).unwrap();
+        let item = db.get("aaaaaaaaaaa").unwrap().unwrap();
+        assert_eq!((item.title.as_str(), item.album), ("O Corvo", None));
+
+        // Forgetting an item for good takes its plays with it.
+        db.lock().execute("DELETE FROM items WHERE id = 'aaaaaaaaaaa'", []).unwrap();
+        assert!(db.history(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn stats_count_time_songs_artists_and_the_favorite_hour() {
+        let db = Db::in_memory().unwrap();
+        done(&db, "aaaaaaaaaaa", "Os Coveiros");
+        done(&db, "bbbbbbbbbbb", "os coveiros");
+        done(&db, "ccccccccccc", "Noite Alta");
+        for (id, seconds) in
+            [("aaaaaaaaaaa", 200.0), ("aaaaaaaaaaa", 180.0), ("bbbbbbbbbbb", 100.0), ("ccccccccccc", 50.0)]
+        {
+            let play = db.played(id).unwrap();
+            db.play_seconds(play, seconds).unwrap();
+        }
+        let stats = db.stats(0).unwrap();
+        assert_eq!((stats.plays, stats.seconds, stats.songs, stats.artists), (4, 530.0, 3, 2));
+        assert_eq!(stats.top_items[0], ("aaaaaaaaaaa".to_string(), 2, 380.0));
+        assert_eq!(stats.top_artists[0].1, 3);
+        assert!(stats.top_hour.is_some());
+        assert_eq!(db.stats(now_ms() + 60_000).unwrap(), Stats::default());
     }
 
     #[test]

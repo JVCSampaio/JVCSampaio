@@ -304,12 +304,22 @@ export function ArtistPage({ artist }: { artist: string }) {
 export function AlbumPage({ album, artist }: { album: string; artist: string }) {
   const items = useLibrary((s) => s.items);
   const all = useMemo(() => libraryItems(items), [items]);
+  // Album order: disc, then track number from the tags or YouTube Music, then arrival.
   const songs = useMemo(
-    () => all.filter((i) => i.kind === "music" && i.album && key(i.album) === key(album) && key(i.artist) === key(artist)).sort((a, b) => (a.addedAt ?? 0) - (b.addedAt ?? 0)),
+    () =>
+      all
+        .filter((i) => i.kind === "music" && i.album && key(i.album) === key(album) && key(i.artist) === key(artist))
+        .sort(
+          (a, b) =>
+            (a.discNumber ?? 1) - (b.discNumber ?? 1) ||
+            (a.trackNumber ?? Number.MAX_SAFE_INTEGER) - (b.trackNumber ?? Number.MAX_SAFE_INTEGER) ||
+            a.addedAt - b.addedAt,
+        ),
     [all, album, artist],
   );
   if (!songs.length) return <Gone what="Esse álbum saiu da biblioteca." />;
   const total = songs.reduce((s, i) => s + (i.duration ?? 0), 0);
+  const year = songs.find((s) => s.year)?.year;
   return (
     <div className="pb-12">
       <BackBar />
@@ -322,7 +332,7 @@ export function AlbumPage({ album, artist }: { album: string; artist: string }) 
             <button type="button" onClick={() => go({ name: "artist", artist })} className="font-medium text-foreground hover:underline">
               {artist}
             </button>
-            , {count(songs.length, "música", "músicas")}, {totalDuration(total)}
+            {year ? `, ${year}` : ""}, {count(songs.length, "música", "músicas")}, {totalDuration(total)}
           </>
         }
         actions={<PlayActions items={songs} />}

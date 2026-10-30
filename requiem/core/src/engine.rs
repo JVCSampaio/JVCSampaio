@@ -11,7 +11,7 @@ use std::time::Duration;
 use tokio::sync::{broadcast, Notify};
 
 use crate::cookies::{self, CookieRecord};
-use crate::db::{now_ms, Db, Finished, Item, NewItem, Playlist};
+use crate::db::{now_ms, Db, Finished, Item, NewItem, Play, Playlist, Stats};
 use crate::links::{self, Pasted};
 use crate::local;
 use crate::lyrics::{self, Cached, Lyrics};
@@ -488,10 +488,43 @@ impl Engine {
         self.db.pending()
     }
 
-    pub fn played(&self, id: &str) -> Result<()> {
-        self.db.played(id)?;
+    /// Counts a play; the answer is the play's row, for the seconds the player reports later.
+    pub fn played(&self, id: &str) -> Result<i64> {
+        let play = self.db.played(id)?;
+        self.emit_item(id);
+        Ok(play)
+    }
+
+    pub fn play_seconds(&self, play: i64, seconds: f64) -> Result<()> {
+        self.db.play_seconds(play, seconds)
+    }
+
+    pub fn like(&self, id: &str, liked: bool) -> Result<()> {
+        self.db.like(id, liked)?;
         self.emit_item(id);
         Ok(())
+    }
+
+    /// Saved often while a long item plays, so no event: the player keeps its own copy.
+    pub fn resume(&self, id: &str, seconds: Option<f64>) -> Result<()> {
+        self.db.set_resume(id, seconds)
+    }
+
+    pub fn edit_info(&self, id: &str, title: &str, artist: &str, album: Option<&str>) -> Result<()> {
+        if title.trim().is_empty() {
+            return Err(anyhow!("O título não pode ficar vazio."));
+        }
+        self.db.edit_info(id, title, artist, album)?;
+        self.emit_item(id);
+        Ok(())
+    }
+
+    pub fn history(&self, limit: i64) -> Result<Vec<Play>> {
+        self.db.history(limit)
+    }
+
+    pub fn stats(&self, since: i64) -> Result<Stats> {
+        self.db.stats(since)
     }
 
     pub fn delete(&self, id: &str, delete_files: bool) -> Result<()> {
@@ -1013,6 +1046,10 @@ impl Engine {
                 file_size: size,
                 width: info.width,
                 height: info.height,
+                track_number: info.track_number,
+                disc_number: info.disc_number,
+                // The year of a song is its release, never the upload date of the video.
+                year: if kind == Kind::Music { info.release_year } else { None },
             },
         )?;
         Ok(None)

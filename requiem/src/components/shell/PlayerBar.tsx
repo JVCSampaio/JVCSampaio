@@ -34,6 +34,7 @@ import {
   usePlayer,
 } from "@/state/player";
 import { go } from "@/state/router";
+import { LikeButton } from "@/components/library/LikeButton";
 
 export function PlayerBar() {
   const id = usePlayer((s) => s.queue[s.index] ?? null);
@@ -67,6 +68,7 @@ function NowPlaying() {
           {item.artist || item.channel}
         </button>
       </div>
+      <LikeButton item={item} className="ml-1" />
     </div>
   );
 }

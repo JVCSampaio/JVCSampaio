@@ -14,6 +14,8 @@ import { WAIT } from "@/lib/motion";
 import { useDelayed } from "@/lib/useDelayed";
 import { DownloadsPage } from "@/pages/DownloadsPage";
 import { HomePage } from "@/pages/HomePage";
+import { LikedPage } from "@/pages/LikedPage";
+import { StatsPage } from "@/pages/StatsPage";
 import { AlbumPage, ArtistPage, LibraryPage } from "@/pages/LibraryPage";
 import { PlaylistPage } from "@/pages/PlaylistPage";
 import { SearchPage } from "@/pages/SearchPage";
@@ -94,6 +96,10 @@ function Page({ route }: { route: Route }) {
       return <AlbumPage key={`${route.album}-${route.artist}`} album={route.album} artist={route.artist} />;
     case "playlist":
       return <PlaylistPage key={route.id} id={route.id} />;
+    case "liked":
+      return <LikedPage />;
+    case "stats":
+      return <StatsPage />;
     case "downloads":
       return <DownloadsPage />;
     case "settings":
