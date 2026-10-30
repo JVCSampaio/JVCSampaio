@@ -1,7 +1,7 @@
 //! The commands the interface calls. Errors travel as the sentence shown to the person.
 
 use requiem_core::db::{self, Item, Play, Playlist, Stats};
-use requiem_core::engine::{AccountTest, Overview, Resolved, SyncStatus, ToolsReport};
+use requiem_core::engine::{AccountTest, ImportStatus, Overview, Resolved, SyncStatus, ToolsReport};
 use requiem_core::lyrics::Lyrics;
 use requiem_core::media::{Entry, Kind};
 use requiem_core::settings::Settings;
@@ -152,6 +152,22 @@ pub fn download(
 #[tauri::command]
 pub fn loudness_soon(state: State<'_, AppState>, ids: Vec<String>) {
     state.engine.loudness_soon(&ids);
+}
+
+/// The songs of a pasted list.
+#[tauri::command]
+pub async fn paste_list(state: State<'_, AppState>, text: String) -> Res<Vec<requiem_core::spotify::Track>> {
+    state.engine.paste_list(&text).await.map_err(msg)
+}
+
+/// Brings a list from Spotify (or pasted) into the library and a playlist, in the background.
+#[tauri::command]
+pub fn import_list(
+    state: State<'_, AppState>,
+    title: String,
+    tracks: Vec<requiem_core::spotify::Track>,
+) -> Res<ImportStatus> {
+    state.engine.import_list(&title, tracks).map_err(msg)
 }
 
 /// Songs like `seed` for a radio, leaving out the ones it already played.

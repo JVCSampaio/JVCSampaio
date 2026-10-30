@@ -399,6 +399,11 @@ export function createMockBackend(): Backend {
     itemReveal: () => wait(undefined),
     search: (query) => wait(query.trim() ? searchPool : [], 900),
     resolve: async (text) => {
+      if (text.includes("spotify")) {
+        const tracks = [...searchPool.slice(0, 3), ...radioPool.slice(0, 9)].map((e) => ({ title: e.title, artist: e.artist, duration: e.duration }));
+        tracks.push({ title: "Uma Faixa Que o YouTube Não Tem", artist: "Banda Fantasma", duration: 201 });
+        return wait({ type: "spotify" as const, title: "Halloween Clássico", tracks }, 900);
+      }
       if (text.includes("list=")) return wait({ type: "playlist" as const, title: "Clássicos para uma noite fria", entries: searchPool.slice(0, 5) }, 800);
       if (text.includes("youtu")) return wait({ type: "video" as const, entry: searchPool[0] }, 800);
       return { type: "query" as const, text };
@@ -411,6 +416,50 @@ export function createMockBackend(): Backend {
       if (it.status !== "done") urgency.set(it.id, Math.max(urgency.get(it.id) ?? 0, level(priority)));
       emit({ type: "item", item: { ...it } });
       return { ...it };
+    },
+    pasteList: async (text) => {
+      const tracks = text
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const [artist, title] = line.includes(" - ") ? line.split(" - ", 2) : ["", line];
+          return { title: title.trim(), artist: artist.trim(), duration: null };
+        });
+      if (!tracks.length) throw "Não achei músicas nesse texto. Escreva uma por linha, com o artista e o nome dela.";
+      return wait(tracks, 300);
+    },
+    importList: async (title, tracks) => {
+      const status = { id: `import-${Date.now()}`, title: title.trim() || "Do Spotify", total: tracks.length, done: 0, found: 0, missing: [] as typeof tracks, finished: false, playlistId: null as number | null, error: null };
+      emit({ type: "import", ...status });
+      const ids: string[] = [];
+      const pool = [...items.values()];
+      let k = 0;
+      const step = () => {
+        const track = tracks[k++];
+        status.done = k;
+        const known = pool.find((i) => i.status === "done" && i.title.toLowerCase() === track.title.toLowerCase());
+        if (known) ids.push(known.id);
+        else if (track.artist === "Banda Fantasma" || !track.artist) status.missing = [...status.missing, track];
+        else {
+          const entry = { id: `sp${String(k).padStart(9, "0")}`, title: track.title, artist: track.artist, channel: track.artist, duration: track.duration, thumbnail: mockArt(track.title), isShort: false };
+          const it = toItem(entry, "music", "spotify");
+          items.set(it.id, it);
+          urgency.set(it.id, level());
+          emit({ type: "item", item: { ...it } });
+          ids.push(it.id);
+        }
+        status.found = ids.length;
+        if (k >= tracks.length) {
+          const id = nextPlaylist++;
+          playlists.push({ id, name: status.title, itemIds: ids, createdAt: Date.now() });
+          emit({ type: "playlists" });
+          Object.assign(status, { finished: true, playlistId: id });
+        } else setTimeout(step, 350);
+        emit({ type: "import", ...status, missing: [...status.missing] });
+      };
+      setTimeout(step, 400);
+      return { ...status };
     },
     loudnessSoon: async (ids) => {
       // The engine measures with FFmpeg; here a made-up loudness arrives a moment later.

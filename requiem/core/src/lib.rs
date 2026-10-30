@@ -14,6 +14,7 @@ pub mod process;
 pub mod radio;
 pub mod server;
 pub mod settings;
+pub mod spotify;
 pub mod tools;
 pub mod update;
 pub mod ytdlp;

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { backend } from "@/lib/backend";
 import type { EngineEvent, InstallStep, Item, LocalStatus, Overview, Playlist, Progress, Settings, SyncStatus, ToolsStatus, Update } from "@/lib/types";
 import { toast } from "./toasts";
+import { importEvent } from "./imports";
 
 interface ToolsState {
   status: ToolsStatus | null;
@@ -135,6 +136,11 @@ function handleEvent(event: EngineEvent) {
     case "update":
       set({ update: { version: event.version, url: event.url } });
       break;
+    case "import": {
+      const { type: _type, ...status } = event;
+      importEvent(status);
+      break;
+    }
   }
 }
 

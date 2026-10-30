@@ -6,7 +6,8 @@ export type DialogRequest =
   | { type: "edit"; item: Item }
   | { type: "newPlaylist"; itemIds: string[] }
   | { type: "renamePlaylist"; playlist: Playlist }
-  | { type: "deletePlaylist"; playlist: Playlist };
+  | { type: "deletePlaylist"; playlist: Playlist }
+  | { type: "pasteList" };
 
 interface DialogState {
   open: DialogRequest | null;

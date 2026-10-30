@@ -4,8 +4,9 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { ProgressBar, TextField } from "@/components/ui/Controls";
 import { Dialog } from "@/components/ui/Dialog";
 import { backend } from "@/lib/backend";
-import { cn, percent } from "@/lib/format";
+import { cn, count, percent } from "@/lib/format";
 import { useDialogs } from "@/state/dialogs";
+import { importEvent } from "@/state/imports";
 import type { Item } from "@/lib/types";
 import { useLibrary } from "@/state/library";
 import { go } from "@/state/router";
@@ -171,6 +172,7 @@ export function DialogsHost() {
   }
 
   if (open.type === "edit") return <EditInfoDialog key={open.item.id} item={open.item} onClose={close} />;
+  if (open.type === "pasteList") return <PasteListDialog onClose={close} />;
 
   if (open.type === "deletePlaylist") {
     const { playlist } = open;
@@ -226,6 +228,61 @@ export function DialogsHost() {
           </Button>
           <Button type="submit" variant="primary" disabled={!name.trim() || busy}>
             {renaming ? "Salvar" : "Criar"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** A list from anywhere: "Artist - Title" lines, an Exportify CSV, Spotify links. The songs
+ *  are found on YouTube in the background; Downloads shows how it goes. */
+function PasteListDialog({ onClose }: { onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const api = await backend();
+      const tracks = await api.pasteList(text);
+      const started = await api.importList(name.trim() || "Lista colada", tracks);
+      importEvent(started);
+      onClose();
+      toast(`Procurando ${count(tracks.length, "música", "músicas")} no YouTube.`, "info", { label: "Ver em Downloads", run: () => go({ name: "downloads" }) });
+    } catch (e) {
+      setError(String(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onOpenChange={(v) => !v && onClose()} title="Colar uma lista" description="Uma música por linha, com o artista e o nome dela. Também vale o CSV do Exportify ou links do Spotify.">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <TextField value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da playlist" maxLength={80} aria-label="Nome da playlist" />
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={8}
+          spellCheck={false}
+          aria-label="Lista de músicas"
+          placeholder={"Saint-Saëns Danse Macabre\nGrieg Na Gruta do Rei da Montanha"}
+          className="mt-3 w-full resize-y rounded-control border border-border bg-surface px-3 py-2 text-[15px] text-foreground placeholder:text-faint-foreground focus-visible:border-border-strong focus-visible:outline-none"
+        />
+        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        <div className="mt-6 flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button type="submit" variant="primary" disabled={!text.trim() || busy}>
+            Trazer as músicas
           </Button>
         </div>
       </form>

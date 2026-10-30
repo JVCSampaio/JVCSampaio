@@ -17,12 +17,31 @@ Windows, macOS e Linux. Feito em Rust ([Tauri 2](https://tauri.app)) com a inter
   MP3), o resto vira vídeo (até 1440p). Shorts, transmissões ao vivo e vídeos longos demais ficam
   de fora, e cada regra é ajustável. O que ficou de fora aparece em Downloads com "Baixar assim
   mesmo".
-- **Baixa qualquer música.** A busca procura no YouTube e mostra artista e duração de cada
-  resultado; em Músicas, Shorts e mixes de uma hora vão para o fim. Também aceita um link de
-  vídeo ou de playlist colado: uma playlist inteira vira playlist no Requiem com um clique.
-- **Toca tudo offline.** Fila, aleatório, repetição, letras sincronizadas do
-  [LRCLIB](https://lrclib.net), vídeos no painel ou em tela cheia, teclas de mídia do teclado,
-  controles na bandeja do sistema, e continua de onde parou.
+- **Baixa qualquer música, e toca na hora.** A busca procura no YouTube e mostra artista e
+  duração de cada resultado; as músicas que você já tem aparecem primeiro, em "Na sua
+  biblioteca". Clique na capa de um resultado e ele toca assim que o arquivo chega (alguns
+  segundos: ele passa na frente de tudo na fila). Também aceita um link de vídeo ou de playlist
+  colado: uma playlist inteira vira playlist no Requiem com um clique.
+- **Traz suas playlists do Spotify.** Cole o link de uma playlist, álbum ou música do Spotify
+  na busca, ou cole uma lista de músicas (de qualquer app, um CSV do Exportify ou vários
+  links). Cada música é procurada no YouTube pelo título, artista e duração; versões ao vivo,
+  covers e remixes só entram quando a lista pede. O que não tiver um par bom fica listado para
+  você buscar.
+- **Rádio e músicas parecidas.** "Iniciar rádio" no menu de uma música monta uma estação a
+  partir dela, e quando a fila acaba músicas parecidas continuam tocando (dá para desligar).
+  O que já está na biblioteca toca de lá, sem baixar de novo.
+- **Som melhor.** O volume fica igual entre músicas (o Requiem mede cada arquivo uma vez, no
+  padrão EBU R128 usado pelos streamings, ou usa o ReplayGain que já estiver nele), por música
+  ou por álbum. Equalizador de 10 bandas com predefinições, transição suave entre músicas (até
+  12 s), faixas de um mesmo álbum emendadas sem silêncio, timer para dormir e velocidade para
+  vídeos e aulas.
+- **Toca tudo offline.** Fila que se arrasta para reordenar, aleatório, repetição, letras
+  sincronizadas do [LRCLIB](https://lrclib.net), vídeos no painel ou em tela cheia, teclas de
+  mídia do teclado e o painel de mídia do sistema, controles na bandeja, e continua de onde
+  parou (vídeos longos e aulas voltam ao ponto em que você estava).
+- **Lembra o que você ouviu.** Curtidas, tocadas recentemente e a Retrospectiva: tempo
+  ouvindo, músicas e artistas mais tocados e o seu horário favorito, nos últimos 7 dias, 30
+  dias, no ano ou desde sempre.
 - **Organiza sem pedir nada.** "Artista - Música (Official Video)" vira título e artista
   limpos. Quando o YouTube Music informa faixa, artista e álbum, a biblioteca usa esses dados e
   monta as páginas de artista e de álbum.
@@ -99,8 +118,9 @@ O histórico do YouTube precisa estar ativado na sua conta.
 requiem/
   core/        motor em Rust, sem janela: banco SQLite, sincronização, fila de downloads,
                yt-dlp, servidor local de mídia, letras, leitura das pastas de música.
-               76 testes, entre eles um que baixa com um yt-dlp de mentira e confere
-               que a música chega à biblioteca e toca.
+               97 testes, entre eles um que baixa com um yt-dlp de mentira e confere
+               que a música chega à biblioteca e toca, e outro que transforma uma lista
+               do Spotify numa playlist.
   src-tauri/   a casca do app: janela, bandeja, comandos, login do YouTube.
   src/         a interface em React (Vite, Tailwind, Radix, Phosphor).
 ```
@@ -109,8 +129,10 @@ requiem/
   decide se é música ou vídeo, e então baixa a partir da mesma leitura.
 - A mídia chega à interface por um servidor HTTP local, só em `127.0.0.1`, com um token
   aleatório por sessão e suporte a Range (para pular para qualquer ponto da música).
-- Um só elemento de vídeo toca músicas e vídeos, então a fila, os controles e as teclas de
-  mídia são os mesmos para os dois.
+- Os vídeos tocam num elemento de vídeo e as músicas em dois elementos de áudio, para uma
+  entrar enquanto a outra sai. Os três passam por uma cadeia de Web Audio (ganho de cada
+  música, equalizador, limitador, volume). Se essa cadeia não funcionar num computador, o app
+  percebe na primeira música e continua tocando sem ela.
 
 ### Rodar e testar
 
@@ -128,8 +150,10 @@ No Linux, o app precisa de `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-de
 
 O CI instala o `.deb` numa máquina limpa e deixa o app percorrer as próprias telas
 (`REQUIEM_TOUR=1`): primeira abertura, busca, uma música baixada tocando com letra, um vídeo,
-biblioteca e ajustes. Com `[screenshots]` na mensagem do commit, as capturas vão para
-`docs/screenshots`.
+biblioteca e ajustes. No caminho, ele mede o som de verdade (estado da cadeia de áudio, o
+volume medido de cada música comparado com o FFmpeg do próprio CI, a transição entre duas
+músicas e o título que o sistema vê) e escreve tudo no resumo da execução. Com
+`[screenshots]` na mensagem do commit, as capturas vão para `docs/screenshots`.
 
 ## Uso responsável
 

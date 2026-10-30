@@ -20,6 +20,7 @@ use crate::media::{self, Decision, Entry, Kind, Rules};
 use crate::radio;
 use crate::server::{self, Asset};
 use crate::settings::{Account, Settings};
+use crate::spotify::{self, Track};
 use crate::tools::{InstallStep, Tools, ToolsStatus};
 use crate::update::{self, Update};
 use crate::ytdlp::{self, Auth, DownloadPlan, Progress, YtDlp};
@@ -99,6 +100,24 @@ pub enum Event {
     },
     Local(LocalStatus),
     Update(Update),
+    Import(ImportStatus),
+}
+
+/// A list brought from Spotify or pasted, while its songs are found on YouTube.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportStatus {
+    pub id: String,
+    pub title: String,
+    pub total: usize,
+    pub done: usize,
+    pub found: usize,
+    /// Songs with no good enough match, to look for by hand.
+    pub missing: Vec<Track>,
+    pub finished: bool,
+    /// The playlist made from what was found, once finished.
+    pub playlist_id: Option<i64>,
+    pub error: Option<String>,
 }
 
 /// Reading the folders of songs already on the computer.
@@ -126,6 +145,7 @@ pub struct ToolsReport {
 pub enum Resolved {
     Video { entry: Entry },
     Playlist { title: String, entries: Vec<Entry> },
+    Spotify { title: String, tracks: Vec<Track> },
     Query { text: String },
 }
 
@@ -627,8 +647,13 @@ impl Engine {
         self.ytdlp_anonymous().search(query, kind, 24).await
     }
 
-    /// Understands what was pasted in the search field: a video link, a playlist, or words.
+    /// Understands what was pasted in the search field: a video link, a playlist, a Spotify
+    /// link, or words.
     pub async fn resolve(&self, text: &str) -> Result<Resolved> {
+        if spotify::parse_link(text).is_some() || spotify::short_link(text).is_some() {
+            let list = spotify::fetch(&self.http, text).await?;
+            return Ok(Resolved::Spotify { title: list.title, tracks: list.tracks });
+        }
         match links::classify(text) {
             Pasted::Query(text) => Ok(Resolved::Query { text }),
             Pasted::Video(id) => {
@@ -705,6 +730,130 @@ impl Engine {
             .map(|i| (radio::song_key(&i.artist, &i.title), i.id))
             .collect();
         Ok(radio::picks(mix, &known, &blocked, &library, self.settings().max_music_minutes as f64 * 60.0))
+    }
+
+    // Lists from Spotify and pasted lists
+
+    /// The songs of a pasted list: "Artist - Title" lines, an Exportify CSV, or Spotify links
+    /// (read from Spotify, a playlist link bringing all its songs).
+    pub async fn paste_list(&self, text: &str) -> Result<Vec<Track>> {
+        let mut tracks = Vec::new();
+        for line in spotify::parse_pasted(text) {
+            match line {
+                spotify::Pasted::Song(track) => tracks.push(track),
+                spotify::Pasted::Link(link) => match spotify::fetch(&self.http, &link).await {
+                    Ok(list) => tracks.extend(list.tracks),
+                    Err(e) => log::info!("pasted link {link}: {e:#}"),
+                },
+            }
+        }
+        if tracks.is_empty() {
+            return Err(anyhow!("Não achei músicas nesse texto. Escreva uma por linha, com o artista e o nome dela."));
+        }
+        Ok(tracks)
+    }
+
+    /// Finds each song on YouTube in the background, three at a time, queues the downloads and
+    /// makes a playlist in the list's order. Progress goes out as `Event::Import`.
+    pub fn import_list(self: &Arc<Self>, title: &str, tracks: Vec<Track>) -> Result<ImportStatus> {
+        self.ready_ytdlp()?;
+        if tracks.is_empty() {
+            return Err(anyhow!("A lista está vazia."));
+        }
+        let title = title.trim();
+        let status = ImportStatus {
+            id: format!("import-{}", now_ms()),
+            title: if title.is_empty() { "Do Spotify".into() } else { title.into() },
+            total: tracks.len(),
+            ..Default::default()
+        };
+        self.emit(Event::Import(status.clone()));
+        let engine = self.clone();
+        let running = status.clone();
+        tokio::spawn(async move { engine.run_import(running, tracks).await });
+        Ok(status)
+    }
+
+    async fn run_import(self: Arc<Self>, mut status: ImportStatus, tracks: Vec<Track>) {
+        use futures_util::stream::{self, StreamExt};
+        let library: Arc<HashMap<String, String>> = Arc::new(match self.db.library() {
+            Ok(items) => items
+                .into_iter()
+                .filter(|i| i.kind == "music")
+                .map(|i| (spotify::key_for(&i.artist, &i.title), i.id))
+                .collect(),
+            Err(_) => HashMap::new(),
+        });
+        let mut found = Vec::new();
+        let mut bot_checks = 0;
+        let mut results = stream::iter(tracks.clone())
+            .map(|track| {
+                let engine = self.clone();
+                let library = library.clone();
+                async move {
+                    let result = engine.match_track(&track, &library).await;
+                    (track, result)
+                }
+            })
+            .buffered(3);
+        while let Some((track, result)) = results.next().await {
+            status.done += 1;
+            match result {
+                Ok(Some(id)) => {
+                    bot_checks = 0;
+                    status.found += 1;
+                    found.push(id);
+                }
+                Ok(None) => {
+                    bot_checks = 0;
+                    status.missing.push(track);
+                }
+                Err(e) => {
+                    status.missing.push(track);
+                    if ytdlp::is_bot_check(&e) {
+                        bot_checks += 1;
+                        if bot_checks >= 3 {
+                            status.error = Some(e.to_string());
+                            status.missing.extend(tracks[status.done..].iter().cloned());
+                            status.done = status.total;
+                            break;
+                        }
+                    }
+                }
+            }
+            self.emit(Event::Import(status.clone()));
+        }
+        drop(results);
+        if !found.is_empty() {
+            match self.db.playlist_create(&status.title, &found) {
+                Ok(id) => {
+                    status.playlist_id = Some(id);
+                    self.emit(Event::Playlists);
+                }
+                Err(e) => status.error = Some(e.to_string()),
+            }
+        }
+        status.finished = true;
+        self.emit(Event::Import(status));
+    }
+
+    /// The library's copy of a song, or the best YouTube result, queued for download. None
+    /// when nothing is close enough.
+    async fn match_track(&self, track: &Track, library: &HashMap<String, String>) -> Result<Option<String>> {
+        if let Some(id) = library.get(&spotify::key_for(&track.artist, &track.title)) {
+            return Ok(Some(id.clone()));
+        }
+        let query = spotify::query(track);
+        let candidates = match self.ytdlp_anonymous().search(&query, Kind::Music, 5).await {
+            Ok(found) => found,
+            Err(e) if ytdlp::is_bot_check(&e) && self.settings().account != Account::None => {
+                self.ytdlp().search(&query, Kind::Music, 5).await?
+            }
+            Err(e) => return Err(e),
+        };
+        let Some(entry) = spotify::best(track, &candidates) else { return Ok(None) };
+        self.request(entry, Kind::Music, "spotify", priority::ASKED)?;
+        Ok(Some(entry.id.clone()))
     }
 
     fn ready_ytdlp(&self) -> Result<()> {
@@ -1265,6 +1414,7 @@ for arg in "$@"; do
   case "$arg" in
     --version) echo 2026.01.01; exit 0 ;;
     -U) exit 0 ;;
+    ytsearch*) echo '{"entries":[{"id":"live0000001","title":"Rick Astley - Never Gonna Give You Up (Live)","channel":"Rick Astley","duration":250},{"id":"dQw4w9WgXcQ","title":"Rick Astley - Never Gonna Give You Up (Official Video)","channel":"Rick Astley","duration":213}]}'; exit 0 ;;
   esac
 done
 out=""; load=""; prev=""
@@ -1286,16 +1436,10 @@ fi
 echo '{"id":"dQw4w9WgXcQ","title":"Rick Astley - Never Gonna Give You Up (Official Video)","channel":"Rick Astley","duration":213,"categories":["Music"]}'
 "#;
 
-    /// The path the person depends on, with everything but YouTube real: a song asked for in
-    /// the search downloads, lands in the library with its file, stays single after the music
-    /// folders are read, and the player's server streams it.
     #[cfg(unix)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn a_requested_song_lands_in_the_library_and_plays() {
+    async fn engine_with_fake_tools(dir: &Path) -> Arc<Engine> {
         use std::os::unix::fs::PermissionsExt;
-
-        let dir = tempfile::tempdir().unwrap();
-        let paths = Paths { data: dir.path().join("data"), default_library: dir.path().join("Requiem"), music: None };
+        let paths = Paths { data: dir.join("data"), default_library: dir.join("Requiem"), music: None };
         std::fs::create_dir_all(paths.bin()).unwrap();
         let version = |line: &str| format!("#!/bin/sh\necho '{line}'\n");
         for (name, body) in [
@@ -1308,7 +1452,55 @@ echo '{"id":"dQw4w9WgXcQ","title":"Rick Astley - Never Gonna Give You Up (Offici
             std::fs::write(&path, body).unwrap();
             std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        let engine = Engine::start(paths).await.unwrap();
+        Engine::start(paths).await.unwrap()
+    }
+
+    /// A list from Spotify: the song YouTube has comes in as the studio take (not the live one),
+    /// downloads and lands in a new playlist; the song with no good match is reported missing.
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_spotify_list_becomes_a_playlist() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = engine_with_fake_tools(dir.path()).await;
+        let mut events = engine.subscribe();
+        let tracks = vec![
+            Track { title: "Never Gonna Give You Up".into(), artist: "Rick Astley".into(), duration: Some(213.0) },
+            Track { title: "Canção Que Não Existe".into(), artist: "Ninguém".into(), duration: Some(100.0) },
+        ];
+        let started = engine.import_list("Do Spotify: Anos 80", tracks).unwrap();
+        assert_eq!((started.total, started.done), (2, 0));
+        let finished = tokio::time::timeout(Duration::from_secs(20), async {
+            loop {
+                if let Ok(Event::Import(status)) = events.recv().await {
+                    if status.finished {
+                        return status;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("the import never finished");
+        assert_eq!((finished.found, finished.done, finished.error.as_deref()), (1, 2, None));
+        assert_eq!(finished.missing.len(), 1);
+        assert_eq!(finished.missing[0].title, "Canção Que Não Existe");
+        let playlist = engine.playlists().unwrap().into_iter().find(|p| Some(p.id) == finished.playlist_id).unwrap();
+        assert_eq!(
+            (playlist.name.as_str(), playlist.item_ids.as_slice()),
+            ("Do Spotify: Anos 80", &["dQw4w9WgXcQ".to_string()][..])
+        );
+        let item = engine.db.get("dQw4w9WgXcQ").unwrap().unwrap();
+        assert_eq!(item.source, "spotify");
+        assert!(engine.db.get("live0000001").unwrap().is_none());
+    }
+
+    /// The path the person depends on, with everything but YouTube real: a song asked for in
+    /// the search downloads, lands in the library with its file, stays single after the music
+    /// folders are read, and the player's server streams it.
+    #[cfg(unix)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_requested_song_lands_in_the_library_and_plays() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = engine_with_fake_tools(dir.path()).await;
 
         let entry = Entry {
             id: "dQw4w9WgXcQ".into(),

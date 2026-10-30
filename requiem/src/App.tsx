@@ -89,7 +89,7 @@ function Page({ route }: { route: Route }) {
     case "home":
       return <HomePage />;
     case "search":
-      return <SearchPage initial={route.query} />;
+      return <SearchPage key={route.query ?? ""} initial={route.query} />;
     case "library":
       return <LibraryPage tab={route.tab ?? "music"} />;
     case "artist":

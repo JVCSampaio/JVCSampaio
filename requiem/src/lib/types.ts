@@ -181,12 +181,36 @@ export type EngineEvent =
   | { type: "notice"; message: string }
   | { type: "settings"; settings: Settings }
   | ({ type: "local" } & LocalStatus)
-  | ({ type: "update" } & Update);
+  | ({ type: "update" } & Update)
+  | ({ type: "import" } & ImportStatus);
 
 export type Resolved =
   | { type: "video"; entry: Entry }
   | { type: "playlist"; title: string; entries: Entry[] }
+  | { type: "spotify"; title: string; tracks: Track[] }
   | { type: "query"; text: string };
+
+/** A song as Spotify (or a pasted list) names it. */
+export interface Track {
+  title: string;
+  /** All artists, comma separated. */
+  artist: string;
+  duration: number | null;
+}
+
+/** A list brought from Spotify or pasted, while its songs are found on YouTube. */
+export interface ImportStatus {
+  id: string;
+  title: string;
+  total: number;
+  done: number;
+  found: number;
+  /** Songs with no good enough match. */
+  missing: Track[];
+  finished: boolean;
+  playlistId: number | null;
+  error: string | null;
+}
 
 export interface AccountTest {
   ok: boolean;

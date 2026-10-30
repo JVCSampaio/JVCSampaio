@@ -75,6 +75,13 @@ export async function runTour(api: Backend) {
     console.warn("tour: video search failed", e);
   }
 
+  // A Spotify playlist pasted in the search: the list as the real page gives it.
+  go({ name: "search", query: "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M" });
+  await until(() => !!document.querySelector("[data-action=import], [data-search-state=error]"), 60_000);
+  await mark("05-spotify-list");
+  const listed = document.querySelectorAll("[data-search-state] ol li").length;
+  await api.tourLog(`spotify: ${listed} songs listed from the embed page`);
+
   await pause(3000);
   go({ name: "downloads" });
   await mark("05-downloads");

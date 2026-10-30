@@ -2,6 +2,7 @@ import type {
   AccountTest,
   EngineEvent,
   Entry,
+  ImportStatus,
   Item,
   Kind,
   Lyrics,
@@ -15,6 +16,7 @@ import type {
   SyncStatus,
   ToolsReport,
   ToolsStatus,
+  Track,
   Update,
 } from "./types";
 
@@ -45,6 +47,10 @@ export interface Backend {
   downloadMany(entries: Entry[], kind: Kind, playlist: string | null): Promise<number | null>;
   /** Songs like `seed` for a radio, leaving out the ones it already played. */
   radio(seed: string, played: string[]): Promise<Entry[]>;
+  /** The songs of a pasted list: "Artist - Title" lines, an Exportify CSV, Spotify links. */
+  pasteList(text: string): Promise<Track[]>;
+  /** Finds a list's songs on YouTube in the background and makes a playlist of them. */
+  importList(title: string, tracks: Track[]): Promise<ImportStatus>;
   /** Measures the loudness of these items before the rest of the library. */
   loudnessSoon(ids: string[]): Promise<void>;
   downloadRetry(id: string): Promise<void>;
@@ -123,6 +129,8 @@ async function tauriBackend(): Promise<Backend> {
     downloadMany: (entries, kind, playlist) => invoke("download_many", { entries, kind, playlist }),
     radio: (seed, played) => invoke("radio", { seed, played }),
     loudnessSoon: (ids) => invoke("loudness_soon", { ids }),
+    pasteList: (text) => invoke("paste_list", { text }),
+    importList: (title, tracks) => invoke("import_list", { title, tracks }),
     downloadRetry: (id) => invoke("download_retry", { id }),
     downloadCancel: (id) => invoke("download_cancel", { id }),
     downloadsClear: () => invoke("downloads_clear"),

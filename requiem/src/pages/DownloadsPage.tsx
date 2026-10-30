@@ -1,5 +1,6 @@
 import { ArrowClockwise, ArrowsClockwise, FilmStrip, Ghost, MoonStars, MusicNotes, Play, WarningCircle, X } from "@phosphor-icons/react";
 import { useMemo, useState } from "react";
+import { ImportCard } from "@/components/library/ImportCard";
 import { Section } from "@/components/library/Tiles";
 import { Button, IconButton } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/Controls";
@@ -12,6 +13,7 @@ import { isAccountConnected, useLibrary } from "@/state/library";
 import { coverUrl, playItem } from "@/state/player";
 import { go } from "@/state/router";
 import { toast } from "@/state/toasts";
+import { dismissImport, useImports } from "@/state/imports";
 
 const sources: Record<string, string> = {
   history: "Do histórico",
@@ -36,6 +38,7 @@ async function call(fn: (api: Awaited<ReturnType<typeof backend>>) => Promise<un
 
 export function DownloadsPage() {
   const items = useLibrary((s) => s.items);
+  const imports = useImports((s) => s.imports);
 
   const { active, queued, missed, arrived } = useMemo(() => {
     const all = Object.values(items);
@@ -51,7 +54,7 @@ export function DownloadsPage() {
     };
   }, [items]);
 
-  const idle = !active.length && !queued.length && !missed.length;
+  const idle = !active.length && !queued.length && !missed.length && !imports.length;
 
   return (
     <div className="px-8 pb-12 pt-8">
@@ -64,6 +67,16 @@ export function DownloadsPage() {
         </EmptyState>
       ) : (
         <div className="mt-10 flex max-w-4xl flex-col gap-10">
+          {imports.length > 0 && (
+            <Section title="Listas trazidas">
+              <div className="space-y-3">
+                {imports.map((status) => (
+                  <ImportCard key={status.id} status={status} onDismiss={() => dismissImport(status.id)} />
+                ))}
+              </div>
+            </Section>
+          )}
+
           {active.length > 0 && (
             <Section title="Baixando agora">
               <ul className="space-y-1">

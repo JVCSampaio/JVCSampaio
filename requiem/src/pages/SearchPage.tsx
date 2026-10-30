@@ -10,6 +10,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ImportCard } from "@/components/library/ImportCard";
 import { Button, IconButton } from "@/components/ui/Button";
 import { ProgressBar, Segmented, Skeleton, TextField } from "@/components/ui/Controls";
 import { Cover, RowCover } from "@/components/ui/Cover";
@@ -17,8 +18,10 @@ import { backend } from "@/lib/backend";
 import { count, duration, percent, totalDuration } from "@/lib/format";
 import { searchLibrary } from "@/lib/match";
 import { WAIT } from "@/lib/motion";
-import type { Entry, Item, Kind, Progress, Resolved } from "@/lib/types";
+import type { Entry, Item, Kind, Progress, Resolved, Track } from "@/lib/types";
 import { useDelayed } from "@/lib/useDelayed";
+import { showDialog } from "@/state/dialogs";
+import { importEvent, useImports } from "@/state/imports";
 import { useLibrary } from "@/state/library";
 import { coverUrl, playEntry, playItem, playList } from "@/state/player";
 import { go } from "@/state/router";
@@ -33,7 +36,7 @@ type Phase =
 const RECENT = "requiem.search.recent";
 const KIND = "requiem.search.kind";
 
-const looksLikeLink = (text: string) => /^https?:\/\/|youtu\.?be|youtube\.com/i.test(text);
+const looksLikeLink = (text: string) => /^https?:\/\/|youtu\.?be|youtube\.com|spotify[.:]/i.test(text);
 
 function readRecent(): string[] {
   try {
@@ -101,7 +104,13 @@ export function SearchPage({ initial }: { initial?: string }) {
       const api = await backend();
       const result = await api.resolve(query);
       const entries =
-        result.type === "query" ? await api.search(result.text, kind) : result.type === "video" ? [result.entry] : result.entries;
+        result.type === "query"
+          ? await api.search(result.text, kind)
+          : result.type === "video"
+            ? [result.entry]
+            : result.type === "playlist"
+              ? result.entries
+              : [];
       if (id !== seq.current) return;
       setPhase({ status: "done", query, result, entries });
       if (result.type === "query" && entries.length) {
@@ -135,7 +144,7 @@ export function SearchPage({ initial }: { initial?: string }) {
           autoFocus
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Uma música, um artista ou um link do YouTube"
+          placeholder="Uma música, um artista, um link do YouTube ou do Spotify"
           aria-label="Buscar no YouTube"
           spellCheck={false}
           className="h-12 min-w-80 max-w-2xl flex-1 [&_input]:text-[17px]"
@@ -189,14 +198,26 @@ export function SearchPage({ initial }: { initial?: string }) {
   );
 }
 
+function PasteList() {
+  return (
+    <div className="mt-8 flex max-w-xl items-center justify-between gap-4 rounded-surface border border-border bg-card px-4 py-3">
+      <p className="text-sm text-muted-foreground">Uma lista de músicas de outro app, um CSV do Exportify ou vários links do Spotify.</p>
+      <Button size="sm" onClick={() => showDialog({ type: "pasteList" })}>
+        Colar uma lista
+      </Button>
+    </div>
+  );
+}
+
 function Idle({ recent, onPick, onForget }: { recent: string[]; onPick: (q: string) => void; onForget: () => void }) {
   if (!recent.length) {
     return (
       <div className="max-w-xl pt-8">
         <h2 className="font-display text-4xl font-semibold text-foreground">O que vamos invocar?</h2>
         <p className="mt-2 text-[15px] text-muted-foreground">
-          Digite o nome de uma música ou cole o link de um vídeo ou de uma playlist do YouTube. O que você baixar fica guardado no seu computador.
+          Digite o nome de uma música ou cole o link de um vídeo, de uma playlist do YouTube ou de uma playlist do Spotify. O que você baixar fica guardado no seu computador.
         </p>
+        <PasteList />
       </div>
     );
   }
@@ -222,6 +243,7 @@ function Idle({ recent, onPick, onForget }: { recent: string[]; onPick: (q: stri
           </li>
         ))}
       </ul>
+      <PasteList />
     </section>
   );
 }
@@ -281,6 +303,7 @@ function InLibrary({ items }: { items: Item[] }) {
 
 function Results({ phase, kind, titled }: { phase: Extract<Phase, { status: "done" }>; kind: Kind; titled: boolean }) {
   const { result, entries, query } = phase;
+  if (result.type === "spotify") return <SpotifyImport title={result.title} tracks={result.tracks} />;
   if (!entries.length) {
     return (
       <div className="max-w-xl">
@@ -300,6 +323,69 @@ function Results({ phase, kind, titled }: { phase: Extract<Phase, { status: "don
           <ResultRow key={entry.id} entry={entry} kind={kind} source={source} />
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** A Spotify list: its songs, and the button that finds them on YouTube and makes a playlist. */
+function SpotifyImport({ title, tracks }: { title: string; tracks: Track[] }) {
+  const [importId, setImportId] = useState<string | null>(null);
+  const status = useImports((s) => s.imports.find((i) => i.id === importId));
+  const [busy, setBusy] = useState(false);
+  const total = tracks.reduce((sum, t) => sum + (t.duration ?? 0), 0);
+  const start = async () => {
+    setBusy(true);
+    try {
+      const started = await (await backend()).importList(title, tracks);
+      importEvent(started);
+      setImportId(started.id);
+    } catch (e) {
+      toast(String(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="max-w-4xl">
+      {status ? (
+        <div className="mb-6">
+          <ImportCard status={status} primary />
+        </div>
+      ) : (
+        <div className="mb-6 rounded-surface border border-border bg-card p-4">
+          <div className="flex items-center gap-6">
+            <Cover src={null} kind="playlist" className="w-24" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] text-muted-foreground">{tracks.length === 1 ? "Música do Spotify" : "Lista do Spotify"}</p>
+              <h2 className="truncate text-2xl font-bold text-foreground" data-selectable>
+                {title}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {count(tracks.length, "música", "músicas")}
+                {total > 0 ? `, ${totalDuration(total)}` : ""}
+              </p>
+            </div>
+            <Button variant="primary" data-action="import" icon={<DownloadSimple weight="bold" className="h-4 w-4" />} disabled={busy} onClick={start}>
+              Trazer para o Requiem
+            </Button>
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Cada música é procurada no YouTube pelo título, pelo artista e pela duração. Versões ao vivo, covers e remixes só entram quando a lista pede.
+          </p>
+        </div>
+      )}
+      <ol className="space-y-0.5">
+        {tracks.map((track, i) => (
+          <li key={`${track.title}-${i}`} className="grid grid-cols-[28px_minmax(0,1fr)_56px] items-center gap-4 rounded-control px-3 py-2">
+            <span className="text-right text-sm tabular-nums text-faint-foreground">{i + 1}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-[15px] font-medium text-foreground">{track.title}</span>
+              <span className="block truncate text-[13px] text-muted-foreground">{track.artist}</span>
+            </span>
+            <span className="text-right text-[13px] tabular-nums text-muted-foreground">{duration(track.duration)}</span>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
