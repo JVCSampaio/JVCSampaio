@@ -112,10 +112,11 @@ jobs:
 
   # After the emulator test passes, the APKs go to a fixed release so the phone can download
   # them from a stable link: releases/download/sonar-latest/Sonar.apk. Publishing waits for
-  # the owner's approval: it runs only for "[release]" in the commit message or a manual run.
+  # the owner's approval: only a manual run (Actions, Run workflow) publishes. A commit message
+  # never does, since any message can quote the marker by accident.
   release:
     needs: [build, smoke]
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -106,8 +106,8 @@ anterior. Para usar uma chave privada, defina `SONAR_KEYSTORE_FILE`, `SONAR_KEYS
 A cada push, o GitHub Actions instala o APK num emulador Android, abre as telas principais,
 compartilha um vídeo de teste (licença Creative Commons) com o app, espera o yt-dlp baixar e
 toca a música. O job falha se o app travar. Com `[screenshots]` na mensagem do commit, as
-capturas vão para `docs/screenshots/`. A versão só é publicada no link de download com
-`[release]` na mensagem do commit ou rodando o workflow à mão, depois da aprovação.
+capturas vão para `docs/screenshots/`. A versão só é publicada no link de download rodando o
+workflow à mão (Actions, Run workflow), depois da aprovação.
 
 ## Compilar
 

@@ -178,11 +178,11 @@ jobs:
           git push origin "HEAD:$GITHUB_REF_NAME"
 
   # The installers go to a fixed release, requiem-latest, with stable download links.
-  # Publishing waits for the owner's approval: it runs only for "[release]" in the commit
-  # message or a manual run.
+  # Publishing waits for the owner's approval: only a manual run (Actions, Run workflow)
+  # publishes. A commit message never does, since any message can quote the marker by accident.
   release:
     needs: [core, desktop]
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
