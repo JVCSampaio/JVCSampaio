@@ -130,6 +130,7 @@ pub fn run() {
             commands::resolve,
             commands::download,
             commands::download_many,
+            commands::radio,
             commands::download_retry,
             commands::download_cancel,
             commands::downloads_clear,

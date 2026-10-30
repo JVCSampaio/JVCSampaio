@@ -7,6 +7,7 @@ import {
   MinusCircle,
   Plus,
   Queue,
+  Radio,
   Skull,
   SkipForward,
   UserSound,
@@ -16,6 +17,7 @@ import { backend } from "@/lib/backend";
 import type { Item, Playlist } from "@/lib/types";
 import { showDialog } from "@/state/dialogs";
 import { enqueue } from "@/state/player";
+import { startRadio } from "@/state/radio";
 import { go } from "@/state/router";
 import { toast } from "@/state/toasts";
 import { toggleLike } from "./LikeButton";
@@ -42,6 +44,7 @@ export function itemMenu(item: Item, playlists: Playlist[], inPlaylist?: Playlis
     { type: "item", label: item.likedAt ? "Descurtir" : "Curtir", icon: <Heart />, onSelect: () => void toggleLike(item) },
     { type: "item", label: "Tocar em seguida", icon: <SkipForward />, onSelect: () => enqueue([item.id], { next: true }) },
     { type: "item", label: "Adicionar à fila", icon: <Queue />, onSelect: () => enqueue([item.id]) },
+    ...(item.kind === "music" ? [{ type: "item", label: "Iniciar rádio", icon: <Radio />, onSelect: () => startRadio(item.id) } as MenuEntry] : []),
     { type: "submenu", label: "Adicionar à playlist", icon: <ListPlus />, entries: addTo },
     ...(item.kind === "music" && item.artist
       ? [{ type: "item", label: "Ver artista", icon: <UserSound />, onSelect: () => go({ name: "artist", artist: item.artist }) } as MenuEntry]

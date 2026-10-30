@@ -43,6 +43,8 @@ export interface Backend {
   /** `priority`: "now" for a song the person is waiting to hear, "soon" for the next songs of a radio. */
   download(entry: Entry, kind: Kind, source?: string, priority?: Priority): Promise<Item>;
   downloadMany(entries: Entry[], kind: Kind, playlist: string | null): Promise<number | null>;
+  /** Songs like `seed` for a radio, leaving out the ones it already played. */
+  radio(seed: string, played: string[]): Promise<Entry[]>;
   downloadRetry(id: string): Promise<void>;
   downloadCancel(id: string): Promise<void>;
   downloadsClear(): Promise<number>;
@@ -115,6 +117,7 @@ async function tauriBackend(): Promise<Backend> {
     resolve: (text) => invoke("resolve", { text }),
     download: (entry, kind, source, priority) => invoke("download", { entry, kind, source: source ?? null, priority: priority ?? null }),
     downloadMany: (entries, kind, playlist) => invoke("download_many", { entries, kind, playlist }),
+    radio: (seed, played) => invoke("radio", { seed, played }),
     downloadRetry: (id) => invoke("download_retry", { id }),
     downloadCancel: (id) => invoke("download_cancel", { id }),
     downloadsClear: () => invoke("downloads_clear"),

@@ -164,6 +164,12 @@ export function SettingsPage({ section }: { section?: "account" | "folders" }) {
         </Row>
       </Group>
 
+      <Group title="Reprodução">
+        <Row title="Tocar parecidas quando a fila acabar" description="Busca no YouTube músicas parecidas com a última que tocou e baixa duas por vez." htmlFor="autoplay">
+          <Switch id="autoplay" label="Tocar parecidas quando a fila acabar" checked={settings.autoplay} onChange={(v) => set({ autoplay: v })} />
+        </Row>
+      </Group>
+
       <Group title="Comportamento">
         <Row title="Fechar a janela deixa tocando" description="O Requiem fica na bandeja do sistema e continua sincronizando." htmlFor="tray">
           <Switch id="tray" label="Fechar a janela deixa tocando" checked={settings.closeToTray} onChange={(v) => set({ closeToTray: v })} />

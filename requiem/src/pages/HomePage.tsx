@@ -13,6 +13,7 @@ import { go } from "@/state/router";
 
 const fromYouTube = (i: Item) => i.source === "history" || i.source === "liked" || i.source === "liked_music";
 const onDisk = (i: Item) => i.source === "local";
+const fromRadio = (i: Item) => i.source === "radio";
 const bySeen = (a: Item, b: Item) => (b.seenAt ?? b.addedAt) - (a.seenAt ?? a.addedAt);
 
 export function HomePage() {
@@ -29,12 +30,13 @@ export function HomePage() {
     const heardMusic = library.filter((i) => i.kind === "music" && fromYouTube(i)).sort(bySeen).slice(0, 14);
     const seenVideos = library.filter((i) => i.kind === "video" && fromYouTube(i)).sort(bySeen).slice(0, 10);
     const computer = library.filter(onDisk).slice(0, 14);
-    const chosen = library.filter((i) => !fromYouTube(i) && !onDisk(i)).slice(0, 14);
+    const chosen = library.filter((i) => !fromYouTube(i) && !onDisk(i) && !fromRadio(i)).slice(0, 14);
+    const radio = library.filter(fromRadio).slice(0, 14);
     const mostPlayed = library
       .filter((i) => i.playCount >= 2)
       .sort((a, b) => b.playCount - a.playCount)
       .slice(0, 8);
-    return { continueWith, heardMusic, computer, seenVideos, chosen, mostPlayed };
+    return { continueWith, heardMusic, computer, seenVideos, chosen, radio, mostPlayed };
   }, [library]);
 
   if (!library.length) return <EmptyHome connected={isAccountConnected(settings)} reading={reading} />;
@@ -104,6 +106,16 @@ export function HomePage() {
                   <SongTile key={item.id} item={item} row={sections.chosen} index={i} />
                 ),
               )}
+            </Shelf>
+          </Section>
+        )}
+
+        {sections.radio.length > 0 && (
+          <Section title="Descobertas na rádio">
+            <Shelf>
+              {sections.radio.map((item, i) => (
+                <SongTile key={item.id} item={item} row={sections.radio} index={i} />
+              ))}
             </Shelf>
           </Section>
         )}

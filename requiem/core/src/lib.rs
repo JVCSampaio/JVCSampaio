@@ -10,6 +10,7 @@ pub mod local;
 pub mod lyrics;
 pub mod media;
 pub mod process;
+pub mod radio;
 pub mod server;
 pub mod settings;
 pub mod tools;

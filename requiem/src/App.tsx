@@ -33,6 +33,7 @@ import {
   toggleMute,
   usePlayer,
 } from "@/state/player";
+import { installRadio } from "@/state/radio";
 import { go, useRouter, type Route } from "@/state/router";
 
 let started = false;
@@ -42,6 +43,7 @@ async function start() {
   started = true;
   await useLibrary.getState().init();
   await installPlayer();
+  installRadio();
   const api = await backend();
   if (await api.tourMark("start").catch(() => false)) {
     const { runTour } = await import("@/lib/tour");

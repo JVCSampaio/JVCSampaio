@@ -48,6 +48,8 @@ pub struct Settings {
     /// Folders whose songs and videos join the library. None until the person changes the
     /// list: the computer's Music folder.
     pub music_folders: Option<Vec<String>>,
+    /// When the queue runs out, similar songs keep playing.
+    pub autoplay: bool,
 }
 
 impl Default for Settings {
@@ -71,6 +73,7 @@ impl Default for Settings {
             close_to_tray: true,
             launch_at_login: false,
             music_folders: None,
+            autoplay: true,
         }
     }
 }

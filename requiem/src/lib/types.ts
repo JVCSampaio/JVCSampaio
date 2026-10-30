@@ -100,6 +100,8 @@ export interface Settings {
   launchAtLogin: boolean;
   /** Folders read into the library. null: the computer's Music folder. */
   musicFolders: string[] | null;
+  /** When the queue runs out, similar songs keep playing. */
+  autoplay: boolean;
 }
 
 export interface Update {

@@ -170,6 +170,7 @@ export function createMockBackend(): Backend {
     closeToTray: true,
     launchAtLogin: false,
     musicFolders: null,
+    autoplay: true,
   };
   let sync: SyncStatus = { running: false, lastRunAt: now - 12 * 60_000, lastFound: 3, lastError: null, nextRunAt: now + 18 * 60_000 };
   const tools: ToolsStatus = { ytdlp: "2026.10.18", deno: "2.5.4", ffmpeg: "6.1.1", ready: true };
@@ -231,6 +232,30 @@ export function createMockBackend(): Backend {
     ["s0000000006", "Saint-Saëns: Danse Macabre, Orquestra Jovem", "Orquestra Jovem do Sul", 455],
     ["dmacabre001", "Danse Macabre, Op. 40", "Camille Saint-Saëns", 431],
     ["pend0000001", "Carmina Burana, O Fortuna", "Carl Orff", 158],
+  ].map(([id, title, artist, duration]) => ({
+    id: id as string,
+    title: title as string,
+    artist: artist as string,
+    channel: artist as string,
+    duration: duration as number,
+    thumbnail: mockArt(id as string),
+    isShort: false,
+  }));
+
+  // What a YouTube mix would bring around a classical piece. `?radio=fail` shows the error.
+  const radioPool: Entry[] = [
+    ["r0000000001", "Na Gruta do Rei da Montanha", "Edvard Grieg", 152],
+    ["r0000000002", "Uma Noite no Monte Calvo", "Modest Mussorgsky", 662],
+    ["r0000000003", "Tocata e Fuga em Ré Menor", "Johann Sebastian Bach", 545],
+    ["r0000000004", "O Aprendiz de Feiticeiro", "Paul Dukas", 671],
+    ["r0000000005", "Marcha Fúnebre de uma Marionete", "Charles Gounod", 268],
+    ["r0000000006", "Lacrimosa", "Wolfgang Amadeus Mozart", 192],
+    ["r0000000007", "Dies Irae", "Giuseppe Verdi", 133],
+    ["r0000000008", "Sonho de uma Noite de Sabá", "Hector Berlioz", 610],
+    ["r0000000009", "Valsa Triste", "Jean Sibelius", 330],
+    ["r0000000010", "Prelúdio em Dó Sustenido Menor", "Sergei Rachmaninoff", 238],
+    ["r0000000011", "O Moinho do Diabo", "Quarteto Crepúsculo", 201],
+    ["r0000000012", "Ilha dos Mortos", "Sergei Rachmaninoff", 1190],
   ].map(([id, title, artist, duration]) => ({
     id: id as string,
     title: title as string,
@@ -366,6 +391,18 @@ export function createMockBackend(): Backend {
       if (it.status !== "done") urgency.set(it.id, Math.max(urgency.get(it.id) ?? 0, level(priority)));
       emit({ type: "item", item: { ...it } });
       return { ...it };
+    },
+    radio: async (_seed, played) => {
+      await wait(null, 1200);
+      if (new URLSearchParams(location.search).get("radio") === "fail") {
+        throw "O YouTube pediu login para confirmar que você não é um robô. Conecte sua conta em Ajustes.";
+      }
+      const skip = new Set(played);
+      const key = (artist: string, title: string) => `${artist}|${title}`.toLowerCase();
+      const owned = new Map([...items.values()].filter((i) => i.status === "done" && i.kind === "music").map((i) => [key(i.artist, i.title), i.id]));
+      return radioPool
+        .map((e) => ({ ...e, id: owned.get(key(e.artist, e.title)) ?? e.id }))
+        .filter((e) => !skip.has(e.id) && items.get(e.id)?.status !== "removed");
     },
     downloadMany: async (entries, kind, playlist) => {
       entries.forEach((e) => {

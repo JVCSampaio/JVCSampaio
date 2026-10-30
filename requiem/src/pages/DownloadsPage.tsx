@@ -20,6 +20,8 @@ const sources: Record<string, string> = {
   search: "Da busca",
   link: "De um link",
   playlist: "De uma playlist",
+  radio: "Da rádio",
+  spotify: "Do Spotify",
 };
 
 const DAY = 86_400_000;

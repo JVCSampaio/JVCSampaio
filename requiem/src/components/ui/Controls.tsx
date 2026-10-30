@@ -96,7 +96,8 @@ export function Switch({
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
-  label: string;
+  /** Leave it out when a visible <label htmlFor={id}> names the switch. */
+  label?: string;
   id?: string;
   disabled?: boolean;
 }) {

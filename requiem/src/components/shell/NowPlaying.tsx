@@ -1,13 +1,16 @@
-import { ArrowClockwise, CornersOut, Flame, X } from "@phosphor-icons/react";
+import { ArrowClockwise, CornersOut, Flame, Radio, X } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
-import { Segmented, Skeleton } from "@/components/ui/Controls";
+import { Segmented, Skeleton, Switch } from "@/components/ui/Controls";
 import { Cover, RowCover } from "@/components/ui/Cover";
 import { backend } from "@/lib/backend";
 import { cn, duration } from "@/lib/format";
+import { WAIT } from "@/lib/motion";
 import type { Lyrics } from "@/lib/types";
+import { useDelayed } from "@/lib/useDelayed";
 import { useLibrary } from "@/state/library";
 import { clearUpcoming, coverUrl, jump, removeFromQueue, seek, setCinema, setPanel, usePlayer, type Panel } from "@/state/player";
+import { retryRadio, stopRadio, useRadio } from "@/state/radio";
 import { useStage } from "@/state/stage";
 
 /** The right-hand panel: what plays (cover or the video itself), its lyrics or the queue. */
@@ -184,48 +187,97 @@ function QueueView() {
   const index = usePlayer((s) => s.index);
   const playing = usePlayer((s) => s.playing);
   const items = useLibrary((s) => s.items);
+  const settings = useLibrary((s) => s.settings);
+  const save = useLibrary((s) => s.saveSettings);
+  const radio = useRadio();
+  const searching = useDelayed(radio.loading, WAIT.showAfter);
   const upcoming = queue.slice(index + 1, index + 101);
   const wide = upcoming.some((qid) => items[qid]?.kind === "video");
+  const added = new Set(radio.added);
+  const firstAdded = upcoming.findIndex((qid) => added.has(qid));
+  const seed = radio.seedId ? items[radio.seedId] : undefined;
+  const autoplay = settings?.autoplay !== false;
 
   return (
     <div className="pb-2">
+      {radio.mode === "radio" && seed && (
+        <div className="mb-2 flex items-center justify-between gap-2 px-2">
+          <p className="min-w-0 truncate text-[13px] text-muted-foreground">
+            <Radio className="mr-1.5 inline h-4 w-4 align-[-3px]" />
+            Rádio de {seed.title}
+          </p>
+          <Button variant="ghost" size="sm" onClick={stopRadio}>
+            Parar a rádio
+          </Button>
+        </div>
+      )}
       <ol className="space-y-0.5">
         {upcoming.map((qid, k) => {
           const it = items[qid];
           if (!it) return null;
           const at = index + 1 + k;
           return (
-            <li key={`${qid}-${at}`} className="group flex items-center gap-3 rounded-control px-2 py-1.5 hover:bg-raised">
-              <button type="button" onClick={() => jump(at)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                <RowCover src={coverUrl(it)} kind={it.kind === "video" ? "video" : "music"} wide={wide} />
-                <span className="min-w-0">
-                  <span className="block truncate text-[15px] text-foreground">{it.title}</span>
-                  <span className="block truncate text-[13px] text-muted-foreground">
-                    {it.artist}, {duration(it.duration)}
+            <li key={`${qid}-${at}`}>
+              {k === firstAdded && radio.mode === "autoplay" && (
+                <p className="px-2 pb-1 pt-3 text-[13px] font-medium text-faint-foreground">Parecidas com o que você ouviu</p>
+              )}
+              <div className="group flex items-center gap-3 rounded-control px-2 py-1.5 hover:bg-raised">
+                <button type="button" onClick={() => jump(at)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                  <RowCover src={coverUrl(it)} kind={it.kind === "video" ? "video" : "music"} wide={wide} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-[15px] text-foreground">{it.title}</span>
+                    <span className="block truncate text-[13px] text-muted-foreground">
+                      {it.artist}, {duration(it.duration)}
+                    </span>
                   </span>
-                </span>
-              </button>
-              <IconButton
-                label="Tirar da fila"
-                size="sm"
-                onClick={() => removeFromQueue(at)}
-                className="[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
-              >
-                <X className="h-4 w-4" />
-              </IconButton>
+                </button>
+                <IconButton
+                  label="Tirar da fila"
+                  size="sm"
+                  onClick={() => removeFromQueue(at)}
+                  className="[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  <X className="h-4 w-4" />
+                </IconButton>
+              </div>
             </li>
           );
         })}
+        {radio.preparing.map((entry) => (
+          <li key={`preparing-${entry.id}`} className="flex items-center gap-3 px-2 py-1.5" data-radio-preparing={entry.id}>
+            <RowCover src={entry.thumbnail || null} kind="music" wide={wide} />
+            <span className="min-w-0">
+              <span className="block truncate text-[15px] text-muted-foreground">{entry.title}</span>
+              <span className="block truncate text-[13px] text-faint-foreground">{entry.artist}, preparando</span>
+            </span>
+          </li>
+        ))}
       </ol>
-      {upcoming.length === 0 ? (
-        <p className="pt-2 text-sm text-muted-foreground">
+      {radio.mode && searching && <p className="px-2 pt-2 text-sm text-muted-foreground">Procurando músicas parecidas</p>}
+      {radio.mode && radio.error && (
+        <div className="px-2 pt-2 text-sm">
+          <p className="text-muted-foreground">{radio.error}</p>
+          <Button variant="ghost" size="sm" className="-ml-3 mt-1" icon={<ArrowClockwise className="h-4 w-4" />} onClick={retryRadio}>
+            Tentar de novo
+          </Button>
+        </div>
+      )}
+      {upcoming.length === 0 && !radio.mode && (
+        <p className="px-2 pt-2 text-sm text-muted-foreground">
           {playing ? <Flame weight="fill" className="mr-1 inline h-4 w-4 text-primary" /> : null}
-          Depois desta, a fila acaba.
+          {autoplay ? "Depois desta, tocam músicas parecidas." : "Depois desta, a fila acaba."}
         </p>
-      ) : (
+      )}
+      {upcoming.length > 0 && (
         <Button variant="ghost" size="sm" className="mt-2" onClick={clearUpcoming}>
           Limpar a fila
         </Button>
+      )}
+      {settings && (
+        <label htmlFor="queue-autoplay" className="mt-4 flex items-center justify-between gap-3 border-t border-border px-2 pt-4 text-sm text-muted-foreground">
+          Tocar parecidas quando a fila acabar
+          <Switch id="queue-autoplay" checked={autoplay} onChange={(v) => void save({ ...settings, autoplay: v })} />
+        </label>
       )}
     </div>
   );

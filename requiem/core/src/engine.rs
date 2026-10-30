@@ -3,7 +3,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -16,11 +16,12 @@ use crate::links::{self, Pasted};
 use crate::local;
 use crate::lyrics::{self, Cached, Lyrics};
 use crate::media::{self, Decision, Entry, Kind, Rules};
+use crate::radio;
 use crate::server::{self, Asset};
 use crate::settings::{Account, Settings};
 use crate::tools::{InstallStep, Tools, ToolsStatus};
 use crate::update::{self, Update};
-use crate::ytdlp::{Auth, DownloadPlan, Progress, YtDlp};
+use crate::ytdlp::{self, Auth, DownloadPlan, Progress, YtDlp};
 
 /// Workers that take anything, the most urgent first.
 const WORKERS: usize = 2;
@@ -588,6 +589,55 @@ impl Engine {
                 Ok(Resolved::Playlist { title, entries })
             }
         }
+    }
+
+    /// Songs like `seed`, from the mix YouTube builds around it, minus what this radio already
+    /// played or queued (`played`, item ids). A song from the computer has no YouTube id, so it
+    /// is looked up first.
+    pub async fn radio(&self, seed: &str, played: &[String]) -> Result<Vec<Entry>> {
+        self.ready_ytdlp()?;
+        let item = self.db.get(seed)?;
+        let video = match &item {
+            Some(item) if item.source == "local" => {
+                let query = format!("{} {}", item.artist, item.title);
+                self.ytdlp_anonymous()
+                    .search(query.trim(), Kind::Music, 3)
+                    .await?
+                    .into_iter()
+                    .find(|e| !e.is_short)
+                    .map(|e| e.id)
+                    .ok_or_else(|| anyhow!("Não achei essa música no YouTube para montar a rádio."))?
+            }
+            _ => seed.to_string(),
+        };
+        let url = radio::mix_url(&video);
+        let mix = match self.ytdlp_anonymous().listing(&url, 60).await {
+            Ok((_, mix)) => mix,
+            // YouTube asks some connections to sign in; the account, when there is one, gets past it.
+            Err(e) if ytdlp::is_bot_check(&e) && self.settings().account != Account::None => {
+                self.ytdlp().listing(&url, 60).await?.1
+            }
+            Err(e) => return Err(e),
+        };
+
+        let mut known: HashSet<String> = played.iter().cloned().collect();
+        known.insert(video);
+        for id in played.iter().map(String::as_str).chain([seed]) {
+            known.insert(id.to_string());
+            if let Some(item) = self.db.get(id)? {
+                known.insert(radio::song_key(&item.artist, &item.title));
+            }
+        }
+        let ids: Vec<String> = mix.iter().map(|e| e.id.clone()).collect();
+        let blocked = self.db.blocked(&ids)?;
+        let library: HashMap<String, String> = self
+            .db
+            .library()?
+            .into_iter()
+            .filter(|i| i.kind == "music")
+            .map(|i| (radio::song_key(&i.artist, &i.title), i.id))
+            .collect();
+        Ok(radio::picks(mix, &known, &blocked, &library, self.settings().max_music_minutes as f64 * 60.0))
     }
 
     fn ready_ytdlp(&self) -> Result<()> {

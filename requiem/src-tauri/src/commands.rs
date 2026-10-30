@@ -148,6 +148,12 @@ pub fn download(
     state.engine.request(&entry, k, source.as_deref().unwrap_or("search"), level).map_err(msg)
 }
 
+/// Songs like `seed` for a radio, leaving out the ones it already played.
+#[tauri::command]
+pub async fn radio(state: State<'_, AppState>, seed: String, played: Vec<String>) -> Res<Vec<Entry>> {
+    state.engine.radio(&seed, &played).await.map_err(msg)
+}
+
 #[tauri::command]
 pub fn download_many(
     state: State<'_, AppState>,

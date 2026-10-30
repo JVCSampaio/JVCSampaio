@@ -26,6 +26,8 @@ interface PlayerState {
   /** A search result asked to play before it was downloaded: it downloads ahead of everything
    *  and starts by itself when the file lands. */
   pending: { entry: Entry; kind: Kind } | null;
+  /** The last item finished and nothing came after it. */
+  ended: boolean;
 }
 
 /** One media element for the whole app: a <video> plays audio files too, so songs and videos
@@ -71,6 +73,7 @@ export const usePlayer = create<PlayerState>()(() => ({
   panel: null,
   cinema: false,
   pending: null,
+  ended: false,
 }));
 
 const set = usePlayer.setState;
@@ -95,6 +98,12 @@ export function coverUrl(item: Pick<Item, "id" | "thumbPath" | "thumbnailUrl"> |
   const base = useLibrary.getState().overview?.mediaBase ?? "";
   if (item.thumbPath && base) return `${base}/c/${item.id}`;
   return item.thumbnailUrl || null;
+}
+
+// Told when the person starts a new list, so a radio playing the old one stops.
+const newQueueListeners = new Set<() => void>();
+export function onNewQueue(listener: () => void) {
+  newQueueListeners.add(listener);
 }
 
 let loadedId: string | null = null;
@@ -137,6 +146,7 @@ function startListening() {
 async function load(autoplay: boolean) {
   const id = currentId();
   const item = itemById(id);
+  if (get().ended) set({ ended: false });
   if (!id || !item) {
     media.removeAttribute("src");
     media.load();
@@ -188,6 +198,7 @@ export function playList(ids: string[], start: number | "random" = 0, options: {
     set({ queue: playable, original: null, index: playable.indexOf(startId), shuffle: false, pending: null });
   }
   if (itemById(startId)?.kind === "video" && get().panel === null) set({ panel: "queue" });
+  newQueueListeners.forEach((listener) => listener());
   void load(true);
 }
 
@@ -240,7 +251,7 @@ export function next(auto = false) {
   if (index + 1 < queue.length) set({ index: index + 1 });
   else if (repeat === "all" || !auto) set({ index: 0 });
   else {
-    set({ playing: false });
+    set({ playing: false, ended: true });
     return;
   }
   void load(true);
@@ -314,8 +325,9 @@ export function cycleRepeat() {
   set({ repeat: order[(order.indexOf(get().repeat) + 1) % order.length] });
 }
 
-/** Adds after the current item (next) or at the end. */
-export function enqueue(ids: string[], options: { next?: boolean } = {}) {
+/** Adds after the current item (next) or at the end. `silent` skips the confirmation, for
+ *  songs a radio adds by itself. */
+export function enqueue(ids: string[], options: { next?: boolean; silent?: boolean } = {}) {
   const playable = ids.filter((id) => itemById(id)?.status === "done");
   if (!playable.length) return;
   const { queue, index } = get();
@@ -325,6 +337,7 @@ export function enqueue(ids: string[], options: { next?: boolean } = {}) {
   }
   const at = options.next ? index + 1 : queue.length;
   set({ queue: [...queue.slice(0, at), ...playable, ...queue.slice(at)] });
+  if (options.silent) return;
   toast(options.next ? "Toca em seguida." : playable.length === 1 ? "Adicionada à fila." : `${playable.length} itens adicionados à fila.`);
 }
 

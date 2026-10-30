@@ -467,6 +467,21 @@ impl Db {
         Ok(())
     }
 
+    /// Of these ids, the ones the person removed or that failed to download: a radio leaves
+    /// them out.
+    pub fn blocked(&self, ids: &[String]) -> Result<HashSet<String>> {
+        let conn = self.lock();
+        let mut stmt = conn.prepare("SELECT status FROM items WHERE id = ?1")?;
+        let mut blocked = HashSet::new();
+        for id in ids {
+            let status: Option<String> = stmt.query_row([id], |r| r.get(0)).optional()?;
+            if matches!(status.as_deref(), Some("removed" | "failed")) {
+                blocked.insert(id.clone());
+            }
+        }
+        Ok(blocked)
+    }
+
     pub fn clear_failed(&self) -> Result<usize> {
         Ok(self.lock().execute("UPDATE items SET status = 'removed' WHERE status IN ('failed', 'skipped')", [])?)
     }

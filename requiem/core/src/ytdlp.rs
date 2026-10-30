@@ -286,6 +286,15 @@ fn parse_line(line: &str) -> Option<Line> {
     Some(Line::Bytes { done, total, speed: num(3), eta: num(4), format: parts.get(5).unwrap_or(&"").to_string() })
 }
 
+/// What the person reads when YouTube asks the connection to sign in.
+pub const BOT_CHECK: &str =
+    "O YouTube pediu login para confirmar que você não é um robô. Conecte sua conta em Ajustes.";
+
+/// The request failed only because YouTube wants a signed-in session.
+pub fn is_bot_check(error: &anyhow::Error) -> bool {
+    error.to_string() == BOT_CHECK
+}
+
 /// The last ERROR line of yt-dlp, turned into something the person can act on.
 pub fn friendly_error(stderr: &str) -> String {
     let error = stderr
@@ -296,7 +305,7 @@ pub fn friendly_error(stderr: &str) -> String {
         .unwrap_or_else(|| stderr.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim().to_string());
     let lower = error.to_lowercase();
     let message = if lower.contains("sign in to confirm") || lower.contains("not a bot") {
-        "O YouTube pediu login para confirmar que você não é um robô. Conecte sua conta em Ajustes."
+        BOT_CHECK
     } else if lower.contains("cookies are no longer valid") || lower.contains("cookies") && lower.contains("expired") {
         "Sua sessão do YouTube expirou. Entre de novo em Ajustes."
     } else if lower.contains("could not copy") && lower.contains("cookie") || lower.contains("failed to decrypt") {
@@ -471,5 +480,23 @@ mod tests {
             eprintln!("  {} ({size} bytes)", file.display());
             assert!(size > 100_000, "{} is too small", file.display());
         }
+    }
+
+    /// The radio against the real YouTube: the mix of a song lists other songs.
+    #[tokio::test]
+    #[ignore]
+    async fn online_radio_mix() {
+        let dir = tempfile::tempdir().unwrap();
+        let tools = crate::tools::Tools::new(dir.path().join("bin"), reqwest::Client::new());
+        tools.install(|_| {}).await.unwrap();
+        let ytdlp = YtDlp { tools: tools.paths(), auth: Auth::None };
+        let seed = ytdlp.search("Saint-Saens Danse Macabre", Kind::Music, 5).await.unwrap().remove(0);
+        let (_, mix) = ytdlp.listing(&crate::radio::mix_url(&seed.id), 60).await.unwrap();
+        let played = [seed.id.clone()].into();
+        let picks = crate::radio::picks(mix, &played, &Default::default(), &Default::default(), 20.0 * 60.0);
+        for e in picks.iter().take(10) {
+            eprintln!("{} - {} ({:?})", e.artist, e.title, e.duration);
+        }
+        assert!(picks.len() >= 5, "only {} songs in the mix of {}", picks.len(), seed.id);
     }
 }
