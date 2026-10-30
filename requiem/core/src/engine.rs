@@ -11,7 +11,7 @@ use std::time::Duration;
 use tokio::sync::{broadcast, Notify};
 
 use crate::cookies::{self, CookieRecord};
-use crate::db::{now_ms, Db, Finished, Item, NewItem, Play, Playlist, Stats};
+use crate::db::{now_ms, priority, Db, Finished, Item, NewItem, Play, Playlist, Stats};
 use crate::links::{self, Pasted};
 use crate::local;
 use crate::lyrics::{self, Cached, Lyrics};
@@ -22,7 +22,11 @@ use crate::tools::{InstallStep, Tools, ToolsStatus};
 use crate::update::{self, Update};
 use crate::ytdlp::{Auth, DownloadPlan, Progress, YtDlp};
 
+/// Workers that take anything, the most urgent first.
 const WORKERS: usize = 2;
+/// Workers kept free for what the person is waiting on: one for the next songs of a radio, one
+/// for a song asked to play now. A long sync never holds them.
+const EXPRESS: [i64; 2] = [priority::SOON, priority::NOW];
 
 #[derive(Debug, Clone)]
 pub struct Paths {
@@ -221,9 +225,9 @@ impl Engine {
         .await?;
         *engine.media_base.write().unwrap() = base;
 
-        for _ in 0..WORKERS {
+        for min_priority in std::iter::repeat_n(priority::SYNC, WORKERS).chain(EXPRESS) {
             let worker = engine.clone();
-            tokio::spawn(async move { worker.worker_loop().await });
+            tokio::spawn(async move { worker.worker_loop(min_priority).await });
         }
         let syncer = engine.clone();
         tokio::spawn(async move { syncer.sync_loop().await });
@@ -593,18 +597,22 @@ impl Engine {
         Ok(())
     }
 
-    /// Queues a download the person asked for. Goes ahead of anything the sync found.
-    pub fn request(&self, entry: &Entry, kind: Kind, source: &str) -> Result<Item> {
-        let item = self.db.request(&NewItem {
-            id: entry.id.clone(),
-            kind: kind.as_str().into(),
-            title: entry.title.clone(),
-            artist: entry.artist.clone(),
-            channel: entry.channel.clone(),
-            duration: entry.duration,
-            thumbnail: Some(entry.thumbnail.clone()),
-            source: source.into(),
-        })?;
+    /// Queues a download the person asked for, ahead of anything the sync found. `priority`
+    /// says how soon it is needed (`db::priority`).
+    pub fn request(&self, entry: &Entry, kind: Kind, source: &str, priority: i64) -> Result<Item> {
+        let item = self.db.request(
+            &NewItem {
+                id: entry.id.clone(),
+                kind: kind.as_str().into(),
+                title: entry.title.clone(),
+                artist: entry.artist.clone(),
+                channel: entry.channel.clone(),
+                duration: entry.duration,
+                thumbnail: Some(entry.thumbnail.clone()),
+                source: source.into(),
+            },
+            priority,
+        )?;
         self.emit(Event::Item { item: Box::new(item.clone()) });
         self.wake_downloads.notify_waiters();
         Ok(item)
@@ -613,7 +621,7 @@ impl Engine {
     /// Queues every entry and, with a name, makes a playlist of them in the same order.
     pub fn request_many(&self, entries: &[Entry], kind: Kind, playlist: Option<&str>) -> Result<Option<i64>> {
         for entry in entries {
-            self.request(entry, kind, "playlist")?;
+            self.request(entry, kind, "playlist", priority::ASKED)?;
         }
         let created = match playlist.map(str::trim).filter(|n| !n.is_empty()) {
             Some(name) => {
@@ -902,12 +910,12 @@ impl Engine {
 
     // Downloads
 
-    async fn worker_loop(self: Arc<Self>) {
+    async fn worker_loop(self: Arc<Self>, min_priority: i64) {
         loop {
             let notified = self.wake_downloads.notified();
             tokio::pin!(notified);
             notified.as_mut().enable();
-            let next = if self.tools.paths().ytdlp.is_some() { self.db.claim_next() } else { Ok(None) };
+            let next = if self.tools.paths().ytdlp.is_some() { self.db.claim_next(min_priority) } else { Ok(None) };
             match next {
                 Ok(Some(item)) => self.run_job(item).await,
                 Ok(None) => {
@@ -1189,7 +1197,7 @@ echo '{"id":"dQw4w9WgXcQ","title":"Rick Astley - Never Gonna Give You Up (Offici
             thumbnail: String::new(),
             is_short: false,
         };
-        engine.request(&entry, Kind::Music, "search").unwrap();
+        engine.request(&entry, Kind::Music, "search", priority::NOW).unwrap();
         let mut finished = None;
         for _ in 0..200 {
             let item = engine.db.get(&entry.id).unwrap().unwrap();

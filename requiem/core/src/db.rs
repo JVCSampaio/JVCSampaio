@@ -8,6 +8,18 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 
+/// Download priorities: what the person is waiting to hear first, the sync last.
+pub mod priority {
+    /// Found by the sync of history and likes.
+    pub const SYNC: i64 = 0;
+    /// Asked for in the search or from a playlist.
+    pub const ASKED: i64 = 10;
+    /// Needed soon: the next songs of the radio.
+    pub const SOON: i64 = 20;
+    /// "Tocar": the person is waiting for it right now.
+    pub const NOW: i64 = 30;
+}
+
 pub fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
 }
@@ -334,32 +346,49 @@ impl Db {
 
     /// The person asked for this video: queue it ahead of the sync, even if it was skipped,
     /// failed or removed before.
-    pub fn request(&self, item: &NewItem) -> Result<Item> {
+    /// A download being written keeps going untouched: sending it back to the queue would let a
+    /// second worker write the same file. Priority only goes up.
+    pub fn request(&self, item: &NewItem, priority: i64) -> Result<Item> {
         {
             let conn = self.lock();
             let now = now_ms();
             conn.execute(
                 "INSERT INTO items (id, kind, title, artist, channel, duration, source, status, thumbnail_url, added_at, seen_at, priority)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'queued', ?8, ?9, ?9, 10)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'queued', ?8, ?9, ?9, ?10)
                  ON CONFLICT(id) DO UPDATE SET
-                    status = CASE WHEN items.status IN ('done', 'downloading') AND items.kind = excluded.kind THEN items.status ELSE 'queued' END,
-                    kind = excluded.kind, priority = 10, error = NULL, seen_at = excluded.seen_at",
+                    status = CASE
+                        WHEN items.status = 'downloading' THEN 'downloading'
+                        WHEN items.status = 'done' AND items.kind = excluded.kind THEN 'done'
+                        ELSE 'queued' END,
+                    kind = CASE WHEN items.status = 'downloading' THEN items.kind ELSE excluded.kind END,
+                    error = CASE WHEN items.status IN ('done', 'downloading') THEN items.error ELSE NULL END,
+                    priority = MAX(items.priority, excluded.priority),
+                    seen_at = excluded.seen_at",
                 params![
-                    item.id, item.kind, item.title, item.artist, item.channel, item.duration, item.source,
-                    item.thumbnail, now
+                    item.id,
+                    item.kind,
+                    item.title,
+                    item.artist,
+                    item.channel,
+                    item.duration,
+                    item.source,
+                    item.thumbnail,
+                    now,
+                    priority
                 ],
             )?;
         }
         self.get(&item.id)?.ok_or_else(|| anyhow::anyhow!("item vanished"))
     }
 
-    /// Claims the next queued item for a worker.
-    pub fn claim_next(&self) -> Result<Option<Item>> {
+    /// Claims the next queued item with at least `min_priority` for a worker.
+    pub fn claim_next(&self, min_priority: i64) -> Result<Option<Item>> {
         let conn = self.lock();
         let id: Option<String> = conn
             .query_row(
-                "SELECT id FROM items WHERE status = 'queued' ORDER BY priority DESC, COALESCE(seen_at, added_at) DESC LIMIT 1",
-                [],
+                "SELECT id FROM items WHERE status = 'queued' AND priority >= ?1
+                 ORDER BY priority DESC, COALESCE(seen_at, added_at) DESC LIMIT 1",
+                [min_priority],
                 |r| r.get(0),
             )
             .optional()?;
@@ -421,7 +450,7 @@ impl Db {
 
     pub fn requeue(&self, id: &str) -> Result<()> {
         self.lock().execute(
-            "UPDATE items SET status = 'queued', error = NULL, priority = 10 WHERE id = ?1 AND status IN ('failed', 'skipped', 'downloading')",
+            "UPDATE items SET status = 'queued', error = NULL, priority = MAX(priority, 10) WHERE id = ?1 AND status IN ('failed', 'skipped')",
             [id],
         )?;
         Ok(())
@@ -701,10 +730,23 @@ impl Db {
         Ok(())
     }
 
+    /// The given ids first, in that order; members left out keep their order after them.
+    /// Every position is written again, so none collide.
     pub fn playlist_reorder(&self, id: i64, item_ids: &[String]) -> Result<()> {
         let mut conn = self.lock();
         let tx = conn.transaction()?;
-        for (position, item) in item_ids.iter().enumerate() {
+        let current: Vec<String> = tx
+            .prepare("SELECT item_id FROM playlist_items WHERE playlist_id = ?1 ORDER BY position")?
+            .query_map([id], |r| r.get(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let members: HashSet<&String> = current.iter().collect();
+        let mut seen = HashSet::new();
+        let order: Vec<&String> = item_ids
+            .iter()
+            .filter(|i| members.contains(i) && seen.insert(*i))
+            .chain(current.iter().filter(|i| !item_ids.contains(i)))
+            .collect();
+        for (position, item) in order.iter().enumerate() {
             tx.execute(
                 "UPDATE playlist_items SET position = ?3 WHERE playlist_id = ?1 AND item_id = ?2",
                 params![id, item, position as i64],
@@ -767,9 +809,13 @@ mod tests {
         }
     }
 
+    fn priority_of(db: &Db, id: &str) -> i64 {
+        db.lock().query_row("SELECT priority FROM items WHERE id = ?1", [id], |r| r.get(0)).unwrap()
+    }
+
     fn done(db: &Db, id: &str, artist: &str) {
-        db.request(&new(id, "search")).unwrap();
-        db.claim_next().unwrap();
+        db.request(&new(id, "search"), priority::ASKED).unwrap();
+        db.claim_next(priority::SYNC).unwrap();
         db.finish(id, &Finished { artist: artist.into(), ..finished(&format!("/m/{id}.m4a")) }).unwrap();
     }
 
@@ -876,17 +922,56 @@ mod tests {
     fn requests_jump_the_queue() {
         let db = Db::in_memory().unwrap();
         db.discover(&new("synced00001", "history"), now_ms()).unwrap();
-        db.request(&NewItem { kind: "music".into(), source: "search".into(), ..new("asked000001", "search") }).unwrap();
-        assert_eq!(db.claim_next().unwrap().unwrap().id, "asked000001");
-        assert_eq!(db.claim_next().unwrap().unwrap().id, "synced00001");
-        assert!(db.claim_next().unwrap().is_none());
+        let music = |id: &str| NewItem { kind: "music".into(), ..new(id, "search") };
+        db.request(&music("asked000001"), priority::ASKED).unwrap();
+        db.request(&music("radio000001"), priority::SOON).unwrap();
+        db.request(&music("playnow0001"), priority::NOW).unwrap();
+        // Asking again with less hurry never lowers the priority.
+        db.request(&music("playnow0001"), priority::ASKED).unwrap();
+        assert_eq!(priority_of(&db, "playnow0001"), priority::NOW);
+
+        // The express workers only take what someone is waiting on.
+        assert_eq!(db.claim_next(priority::NOW).unwrap().unwrap().id, "playnow0001");
+        assert!(db.claim_next(priority::NOW).unwrap().is_none());
+        assert_eq!(db.claim_next(priority::SOON).unwrap().unwrap().id, "radio000001");
+        assert!(db.claim_next(priority::SOON).unwrap().is_none());
+        assert_eq!(db.claim_next(priority::SYNC).unwrap().unwrap().id, "asked000001");
+        assert_eq!(db.claim_next(priority::SYNC).unwrap().unwrap().id, "synced00001");
+        assert!(db.claim_next(priority::SYNC).unwrap().is_none());
+    }
+
+    /// Asking for a song while a worker writes it must not hand it to a second worker.
+    #[test]
+    fn a_download_in_progress_is_never_queued_twice() {
+        let db = Db::in_memory().unwrap();
+        db.discover(&new("fffffffffff", "history"), 1).unwrap();
+        let claimed = db.claim_next(priority::SYNC).unwrap().unwrap();
+        assert_eq!(claimed.kind, "auto");
+
+        let again =
+            db.request(&NewItem { kind: "music".into(), ..new("fffffffffff", "search") }, priority::NOW).unwrap();
+        assert_eq!((again.status.as_str(), again.kind.as_str()), ("downloading", "auto"));
+        assert_eq!(priority_of(&db, "fffffffffff"), priority::NOW);
+        db.requeue("fffffffffff").unwrap();
+        assert_eq!(db.get("fffffffffff").unwrap().unwrap().status, "downloading");
+        assert!(db.claim_next(priority::SYNC).unwrap().is_none());
+
+        // Retrying works on what failed, and asking for a finished song keeps it finished.
+        db.fail("fffffffffff", "rede").unwrap();
+        db.requeue("fffffffffff").unwrap();
+        assert_eq!(db.get("fffffffffff").unwrap().unwrap().status, "queued");
+        db.claim_next(priority::SYNC).unwrap();
+        db.finish("fffffffffff", &finished("/m/f.m4a")).unwrap();
+        let done =
+            db.request(&NewItem { kind: "music".into(), ..new("fffffffffff", "search") }, priority::NOW).unwrap();
+        assert_eq!(done.status, "done");
     }
 
     #[test]
     fn finished_items_reach_the_library() {
         let db = Db::in_memory().unwrap();
         db.discover(&new("bbbbbbbbbbb", "liked"), 1).unwrap();
-        let claimed = db.claim_next().unwrap().unwrap();
+        let claimed = db.claim_next(priority::SYNC).unwrap().unwrap();
         assert_eq!(claimed.status, "downloading");
         db.finish("bbbbbbbbbbb", &finished("/m/b.m4a")).unwrap();
         let lib = db.library().unwrap();
@@ -902,7 +987,7 @@ mod tests {
         db.remove("ccccccccccc").unwrap();
         assert!(!db.discover(&new("ccccccccccc", "history"), 2).unwrap());
         assert_eq!(db.get("ccccccccccc").unwrap().unwrap().status, "removed");
-        assert!(db.claim_next().unwrap().is_none());
+        assert!(db.claim_next(priority::SYNC).unwrap().is_none());
     }
 
     #[test]
@@ -910,7 +995,8 @@ mod tests {
         let db = Db::in_memory().unwrap();
         db.discover(&new("ddddddddddd", "history"), 1).unwrap();
         db.remove("ddddddddddd").unwrap();
-        let item = db.request(&NewItem { kind: "video".into(), ..new("ddddddddddd", "search") }).unwrap();
+        let item =
+            db.request(&NewItem { kind: "video".into(), ..new("ddddddddddd", "search") }, priority::ASKED).unwrap();
         assert_eq!(item.status, "queued");
         assert_eq!(item.kind, "video");
     }
@@ -919,7 +1005,7 @@ mod tests {
     fn interrupted_downloads_requeue() {
         let db = Db::in_memory().unwrap();
         db.discover(&new("eeeeeeeeeee", "history"), 1).unwrap();
-        db.claim_next().unwrap();
+        db.claim_next(priority::SYNC).unwrap();
         assert_eq!(db.requeue_interrupted().unwrap(), 1);
         assert_eq!(db.get("eeeeeeeeeee").unwrap().unwrap().status, "queued");
     }
@@ -936,7 +1022,10 @@ mod tests {
         let list = &db.playlists().unwrap()[0];
         assert_eq!(list.item_ids, vec!["p0000000002", "p0000000001", "p0000000003"]);
         db.playlist_reorder(pid, &["p0000000003".into(), "p0000000002".into(), "p0000000001".into()]).unwrap();
-        assert_eq!(db.playlists().unwrap()[0].item_ids[0], "p0000000003");
+        assert_eq!(db.playlists().unwrap()[0].item_ids, vec!["p0000000003", "p0000000002", "p0000000001"]);
+        // A partial order puts those first and keeps the rest after them, with no repeats.
+        db.playlist_reorder(pid, &["p0000000001".into(), "nope0000000".into(), "p0000000001".into()]).unwrap();
+        assert_eq!(db.playlists().unwrap()[0].item_ids, vec!["p0000000001", "p0000000003", "p0000000002"]);
         db.remove("p0000000002").unwrap();
         assert_eq!(db.playlists().unwrap()[0].item_ids.len(), 2);
     }

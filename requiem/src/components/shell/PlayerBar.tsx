@@ -12,16 +12,18 @@ import {
   SpeakerHigh,
   SpeakerLow,
   SpeakerSlash,
+  X,
 } from "@phosphor-icons/react";
 import { useState } from "react";
 import { IconButton, KeyCombo } from "@/components/ui/Button";
 import { Slider } from "@/components/ui/Controls";
 import { Cover } from "@/components/ui/Cover";
-import { duration } from "@/lib/format";
+import { duration, percent } from "@/lib/format";
 import { useLibrary } from "@/state/library";
 import {
   coverUrl,
   cycleRepeat,
+  dropPending,
   next,
   previous,
   seek,
@@ -39,13 +41,43 @@ import { LikeButton } from "@/components/library/LikeButton";
 export function PlayerBar() {
   const id = usePlayer((s) => s.queue[s.index] ?? null);
   const item = useLibrary((s) => (id ? s.items[id] : undefined));
+  const pending = usePlayer((s) => s.pending);
 
   return (
     <footer className="grid h-[84px] grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)_minmax(0,1fr)] items-center gap-6 border-t border-border bg-surface px-4">
-      {item ? <NowPlaying /> : <span />}
-      {item ? <Transport /> : <p className="text-center text-sm text-faint-foreground">Nada tocando. Escolha uma música na biblioteca.</p>}
+      {pending ? <Preparing /> : item ? <NowPlaying /> : <span />}
+      {item ? (
+        <Transport />
+      ) : (
+        <p className="text-center text-sm text-faint-foreground">
+          {pending ? "Começa sozinha quando o arquivo chegar." : "Nada tocando. Escolha uma música na biblioteca."}
+        </p>
+      )}
       {item ? <Extras isVideo={item.kind === "video"} /> : <span />}
     </footer>
+  );
+}
+
+/** A search result asked to play, while its file downloads ahead of everything else. */
+function Preparing() {
+  const pending = usePlayer((s) => s.pending);
+  const status = useLibrary((s) => (pending ? s.items[pending.entry.id]?.status : undefined));
+  const fraction = useLibrary((s) => (pending ? s.progress[pending.entry.id]?.fraction : undefined));
+  if (!pending) return null;
+  const { entry, kind } = pending;
+  return (
+    <div className="flex min-w-0 items-center gap-3" data-preparing={entry.id}>
+      <Cover src={entry.thumbnail || null} kind={kind} className={kind === "video" ? "w-[96px]" : "w-14"} />
+      <div className="min-w-0" aria-live="polite">
+        <div className="truncate text-[15px] font-medium text-foreground">{entry.title}</div>
+        <div className="truncate text-[13px] text-muted-foreground">
+          {status === "downloading" && fraction != null ? `Preparando, ${percent(fraction)}` : "Preparando"}
+        </div>
+      </div>
+      <IconButton label="Não tocar esta" size="sm" onClick={dropPending} className="ml-1">
+        <X className="h-4 w-4" />
+      </IconButton>
+    </div>
   );
 }
 

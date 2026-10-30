@@ -178,27 +178,45 @@ export function createMockBackend(): Backend {
   const listeners = new Set<(e: EngineEvent) => void>();
   const emit = (e: EngineEvent) => listeners.forEach((l) => l(e));
 
-  // Downloads advance in the background.
-  let fraction = 0.37;
+  // Downloads advance in the background, the most urgent first, like the engine: one worker
+  // takes anything, an express one only what someone is waiting on.
+  const urgency = new Map<string, number>();
+  const level = (priority?: string) => (priority === "now" ? 30 : priority === "soon" ? 20 : 10);
+  const workers = [
+    { min: 0, step: 0.04, id: null as string | null, fraction: 0.37 },
+    { min: 20, step: 0.16, id: null as string | null, fraction: 0 },
+  ];
   setInterval(() => {
-    const active = [...items.values()].find((i) => i.status === "downloading");
-    if (!active) {
-      const next = [...items.values()].find((i) => i.status === "queued");
-      if (next) {
-        next.status = "downloading";
-        next.kind = next.kind === "auto" ? ((next.duration ?? 0) > 900 ? "video" : "music") : next.kind;
-        fraction = 0;
-        emit({ type: "item", item: { ...next } });
+    for (const worker of workers) {
+      const active = worker.id ? items.get(worker.id) : undefined;
+      if (!active || active.status !== "downloading") {
+        const taken = new Set(workers.map((w) => w.id));
+        const next =
+          worker.min === 0 ? [...items.values()].find((i) => i.status === "downloading" && !taken.has(i.id)) : undefined;
+        const queued = [...items.values()]
+          .filter((i) => i.status === "queued" && (urgency.get(i.id) ?? 0) >= worker.min)
+          .sort((a, b) => (urgency.get(b.id) ?? 0) - (urgency.get(a.id) ?? 0))[0];
+        const pick = next ?? queued;
+        worker.id = pick?.id ?? null;
+        if (pick && pick.status === "queued") {
+          pick.status = "downloading";
+          pick.kind = pick.kind === "auto" ? ((pick.duration ?? 0) > 900 ? "video" : "music") : pick.kind;
+          worker.fraction = 0;
+          emit({ type: "item", item: { ...pick } });
+        }
+        continue;
       }
-      return;
-    }
-    fraction = Math.min(1, fraction + 0.04);
-    emit({ type: "progress", id: active.id, fraction, speed: 2_400_000, eta: Math.round((1 - fraction) * 25), stage: "Baixando" });
-    if (fraction >= 1) {
-      active.status = "done";
-      active.downloadedAt = Date.now();
-      active.filePath = `/Requiem/${active.title}.m4a`;
-      emit({ type: "item", item: { ...active } });
+      worker.fraction = Math.min(1, worker.fraction + worker.step);
+      const fraction = worker.fraction;
+      emit({ type: "progress", id: active.id, fraction, speed: 2_400_000, eta: Math.round((1 - fraction) * 25), stage: "Baixando" });
+      if (fraction >= 1) {
+        active.status = "done";
+        active.downloadedAt = Date.now();
+        active.filePath = `/Requiem/${active.title}.m4a`;
+        urgency.delete(active.id);
+        worker.id = null;
+        emit({ type: "item", item: { ...active } });
+      }
     }
   }, 700);
 
@@ -340,16 +358,19 @@ export function createMockBackend(): Backend {
       if (text.includes("youtu")) return wait({ type: "video" as const, entry: searchPool[0] }, 800);
       return { type: "query" as const, text };
     },
-    download: async (entry, kind, source = "search") => {
+    download: async (entry, kind, source = "search", priority) => {
       const existing = items.get(entry.id);
-      const it = existing && existing.status === "done" ? existing : toItem(entry, kind, source);
+      const keep = existing && (existing.status === "done" || existing.status === "downloading");
+      const it = keep ? existing : toItem(entry, kind, source);
       items.set(it.id, it);
+      if (it.status !== "done") urgency.set(it.id, Math.max(urgency.get(it.id) ?? 0, level(priority)));
       emit({ type: "item", item: { ...it } });
-      return it;
+      return { ...it };
     },
     downloadMany: async (entries, kind, playlist) => {
       entries.forEach((e) => {
         const it = toItem(e, kind, "playlist");
+        urgency.set(it.id, level());
         items.set(it.id, it);
         emit({ type: "item", item: { ...it } });
       });
@@ -361,9 +382,10 @@ export function createMockBackend(): Backend {
     },
     downloadRetry: async (id) => {
       const it = items.get(id);
-      if (it) {
+      if (it && (it.status === "failed" || it.status === "skipped")) {
         it.status = "queued";
         it.error = null;
+        urgency.set(id, Math.max(urgency.get(id) ?? 0, level()));
         emit({ type: "item", item: { ...it } });
       }
     },

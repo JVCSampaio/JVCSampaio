@@ -8,6 +8,7 @@ import type {
   Overview,
   Play,
   Playlist,
+  Priority,
   Resolved,
   Settings,
   Stats,
@@ -39,7 +40,8 @@ export interface Backend {
   itemReveal(id: string): Promise<void>;
   search(query: string, kind: Kind): Promise<Entry[]>;
   resolve(text: string): Promise<Resolved>;
-  download(entry: Entry, kind: Kind, source?: string): Promise<Item>;
+  /** `priority`: "now" for a song the person is waiting to hear, "soon" for the next songs of a radio. */
+  download(entry: Entry, kind: Kind, source?: string, priority?: Priority): Promise<Item>;
   downloadMany(entries: Entry[], kind: Kind, playlist: string | null): Promise<number | null>;
   downloadRetry(id: string): Promise<void>;
   downloadCancel(id: string): Promise<void>;
@@ -111,7 +113,7 @@ async function tauriBackend(): Promise<Backend> {
     itemReveal: (id) => invoke("item_reveal", { id }),
     search: (query, kind) => invoke("search", { query, kind }),
     resolve: (text) => invoke("resolve", { text }),
-    download: (entry, kind, source) => invoke("download", { entry, kind, source: source ?? null }),
+    download: (entry, kind, source, priority) => invoke("download", { entry, kind, source: source ?? null, priority: priority ?? null }),
     downloadMany: (entries, kind, playlist) => invoke("download_many", { entries, kind, playlist }),
     downloadRetry: (id) => invoke("download_retry", { id }),
     downloadCancel: (id) => invoke("download_cancel", { id }),

@@ -1,6 +1,9 @@
 // Mirrors of the Rust engine's serde types (requiem-core).
 
 export type Kind = "music" | "video";
+/** How soon a download is needed: "now" for a song the person is waiting to hear, "soon" for
+ *  the next songs of a radio. Plain downloads have none. */
+export type Priority = "now" | "soon";
 export type ItemStatus = "queued" | "downloading" | "done" | "failed" | "skipped" | "removed";
 
 export interface Item {

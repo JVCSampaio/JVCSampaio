@@ -366,7 +366,7 @@ mod tests {
     fn downloads_are_not_listed_twice() {
         let s = setup();
         let item = NewItem { id: "dQw4w9WgXcQ".into(), kind: "music".into(), title: "x".into(), ..Default::default() };
-        s.db.request(&item).unwrap();
+        s.db.request(&item, crate::db::priority::ASKED).unwrap();
         wav(&s.music.join("Rick Astley - Never Gonna Give You Up [dQw4w9WgXcQ].wav"));
         let report = scan(&s.db, std::slice::from_ref(&s.music), &s.covers, |_| {}).unwrap();
         assert_eq!(report.found, 0);

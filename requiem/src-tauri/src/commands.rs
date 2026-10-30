@@ -1,6 +1,6 @@
 //! The commands the interface calls. Errors travel as the sentence shown to the person.
 
-use requiem_core::db::{Item, Play, Playlist, Stats};
+use requiem_core::db::{self, Item, Play, Playlist, Stats};
 use requiem_core::engine::{AccountTest, Overview, Resolved, SyncStatus, ToolsReport};
 use requiem_core::lyrics::Lyrics;
 use requiem_core::media::{Entry, Kind};
@@ -129,10 +129,23 @@ pub async fn resolve(state: State<'_, AppState>, text: String) -> Res<Resolved> 
     state.engine.resolve(&text).await.map_err(msg)
 }
 
+/// `priority` is "now" for a song the person is waiting to hear, "soon" for the next songs of a
+/// radio, and anything else for a plain download.
 #[tauri::command]
-pub fn download(state: State<'_, AppState>, entry: Entry, kind: String, source: Option<String>) -> Res<Item> {
+pub fn download(
+    state: State<'_, AppState>,
+    entry: Entry,
+    kind: String,
+    source: Option<String>,
+    priority: Option<String>,
+) -> Res<Item> {
     let k = self::kind(&kind)?;
-    state.engine.request(&entry, k, source.as_deref().unwrap_or("search")).map_err(msg)
+    let level = match priority.as_deref() {
+        Some("now") => db::priority::NOW,
+        Some("soon") => db::priority::SOON,
+        _ => db::priority::ASKED,
+    };
+    state.engine.request(&entry, k, source.as_deref().unwrap_or("search"), level).map_err(msg)
 }
 
 #[tauri::command]

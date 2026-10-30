@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { backend } from "@/lib/backend";
-import type { Item } from "@/lib/types";
+import type { Entry, Item, Kind } from "@/lib/types";
 import { useLibrary } from "./library";
 import { toast } from "./toasts";
 
@@ -23,6 +23,9 @@ interface PlayerState {
   repeat: Repeat;
   panel: Panel;
   cinema: boolean;
+  /** A search result asked to play before it was downloaded: it downloads ahead of everything
+   *  and starts by itself when the file lands. */
+  pending: { entry: Entry; kind: Kind } | null;
 }
 
 /** One media element for the whole app: a <video> plays audio files too, so songs and videos
@@ -67,6 +70,7 @@ export const usePlayer = create<PlayerState>()(() => ({
   repeat: "off",
   panel: null,
   cinema: false,
+  pending: null,
 }));
 
 const set = usePlayer.setState;
@@ -179,9 +183,9 @@ export function playList(ids: string[], start: number | "random" = 0, options: {
         : playable[0];
   if (shuffle) {
     const rest = shuffled(playable.filter((id) => id !== startId));
-    set({ queue: [startId, ...rest], original: playable, index: 0, shuffle: true });
+    set({ queue: [startId, ...rest], original: playable, index: 0, shuffle: true, pending: null });
   } else {
-    set({ queue: playable, original: null, index: playable.indexOf(startId), shuffle: false });
+    set({ queue: playable, original: null, index: playable.indexOf(startId), shuffle: false, pending: null });
   }
   if (itemById(startId)?.kind === "video" && get().panel === null) set({ panel: "queue" });
   void load(true);
@@ -191,7 +195,32 @@ export function playItem(id: string) {
   playList([id], 0, { shuffle: false });
 }
 
+/** Plays a search result. A song already in the library starts at once. Anything else
+ *  downloads ahead of everything else and starts by itself when the file lands; meanwhile the
+ *  player shows it as being prepared. */
+export async function playEntry(entry: Entry, kind: Kind, source = "search") {
+  if (itemById(entry.id)?.status === "done") {
+    playItem(entry.id);
+    return;
+  }
+  set({ pending: { entry, kind } });
+  media.pause();
+  try {
+    const item = await (await backend()).download(entry, kind, source, "now");
+    if (item.status === "done" && get().pending?.entry.id === entry.id) playItem(item.id);
+  } catch (e) {
+    if (get().pending?.entry.id === entry.id) set({ pending: null });
+    toast(String(e), "error");
+  }
+}
+
+/** Gives up waiting for the prepared song; its download goes on. */
+export function dropPending() {
+  if (get().pending) set({ pending: null });
+}
+
 export function toggle() {
+  dropPending();
   if (!currentId()) return;
   if (media.paused) {
     if (loadedId !== currentId()) void load(true);
@@ -200,6 +229,7 @@ export function toggle() {
 }
 
 export function next(auto = false) {
+  if (!auto) dropPending();
   const { queue, index, repeat } = get();
   if (!queue.length) return;
   if (auto && repeat === "one") {
@@ -217,6 +247,7 @@ export function next(auto = false) {
 }
 
 export function previous() {
+  dropPending();
   const { index, queue, repeat } = get();
   if (media.currentTime > 3 || !queue.length) {
     media.currentTime = 0;
@@ -233,6 +264,7 @@ export function previous() {
 
 export function jump(index: number) {
   if (index < 0 || index >= get().queue.length) return;
+  dropPending();
   set({ index });
   void load(true);
 }
@@ -444,9 +476,19 @@ export async function installPlayer() {
     }, 1000);
   });
 
-  // An item deleted from the library leaves the queue.
+  // An item deleted from the library leaves the queue, and a song being prepared starts the
+  // moment its file lands.
   useLibrary.subscribe((lib, prev) => {
     if (lib.items === prev.items) return;
+    const pending = get().pending;
+    if (pending) {
+      const item = lib.items[pending.entry.id];
+      if (item?.status === "done") playItem(item.id);
+      else if (item?.status === "failed" || item?.status === "skipped") {
+        set({ pending: null });
+        toast(item.error ? `Não deu para tocar "${item.title}". ${item.error}` : `Não deu para tocar "${item.title}".`, "error");
+      } else if (!item && prev.items[pending.entry.id]) set({ pending: null });
+    }
     const { queue, index } = get();
     const keep = queue.filter((id) => lib.items[id]?.status === "done");
     if (keep.length === queue.length) return;

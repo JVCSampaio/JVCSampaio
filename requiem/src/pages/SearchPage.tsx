@@ -9,17 +9,18 @@ import {
   WarningCircle,
   X,
 } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { ProgressBar, Segmented, Skeleton, TextField } from "@/components/ui/Controls";
-import { Cover } from "@/components/ui/Cover";
+import { Cover, RowCover } from "@/components/ui/Cover";
 import { backend } from "@/lib/backend";
 import { count, duration, percent, totalDuration } from "@/lib/format";
+import { searchLibrary } from "@/lib/match";
 import { WAIT } from "@/lib/motion";
 import type { Entry, Item, Kind, Progress, Resolved } from "@/lib/types";
 import { useDelayed } from "@/lib/useDelayed";
 import { useLibrary } from "@/state/library";
-import { playItem } from "@/state/player";
+import { coverUrl, playEntry, playItem, playList } from "@/state/player";
 import { go } from "@/state/router";
 import { toast } from "@/state/toasts";
 
@@ -69,6 +70,8 @@ export function SearchPage({ initial }: { initial?: string }) {
   const seq = useRef(0);
   const link = looksLikeLink(submitted);
   const showSkeleton = useDelayed(phase.status === "loading", WAIT.showAfter);
+  const items = useLibrary((s) => s.items);
+  const mine = useMemo(() => (link ? [] : searchLibrary(Object.values(items), submitted)), [items, submitted, link]);
 
   // Words search when typing stops; a pasted link goes at once. Enter skips the wait.
   useEffect(() => {
@@ -157,6 +160,7 @@ export function SearchPage({ initial }: { initial?: string }) {
       </form>
 
       <div className="mt-8" data-search-state={phase.status}>
+        {phase.status !== "idle" && mine.length > 0 && <InLibrary items={mine} />}
         {phase.status === "idle" && (
           <Idle
             recent={recent}
@@ -179,7 +183,7 @@ export function SearchPage({ initial }: { initial?: string }) {
             </div>
           </div>
         )}
-        {phase.status === "done" && <Results phase={phase} kind={kind} />}
+        {phase.status === "done" && <Results phase={phase} kind={kind} titled={mine.length > 0} />}
       </div>
     </div>
   );
@@ -243,7 +247,39 @@ function ResultsSkeleton({ video }: { video: boolean }) {
   );
 }
 
-function Results({ phase, kind }: { phase: Extract<Phase, { status: "done" }>; kind: Kind }) {
+/** Songs already in the library that match the words: they play at once, with no download. */
+function InLibrary({ items }: { items: Item[] }) {
+  const ids = items.map((i) => i.id);
+  const wide = items.some((i) => i.kind === "video");
+  return (
+    <section className="mb-8 max-w-4xl" data-in-library>
+      <h2 className="mb-2 px-3 text-[13px] font-medium text-faint-foreground">Na sua biblioteca</h2>
+      <ul className="space-y-0.5">
+        {items.map((item, i) => (
+          <li key={item.id}>
+            <button
+              type="button"
+              onClick={() => playList(ids, i, { shuffle: false })}
+              className="grid w-full grid-cols-[auto_minmax(0,1fr)_56px_minmax(150px,auto)] items-center gap-4 rounded-control px-3 py-2 text-left transition-[background-color] [transition-duration:var(--dur-fast)] hover:bg-raised"
+            >
+              <RowCover src={coverUrl(item)} kind={item.kind === "video" ? "video" : "music"} wide={wide} />
+              <span className="min-w-0">
+                <span className="block truncate text-[15px] font-medium text-foreground">{item.title}</span>
+                <span className="block truncate text-[13px] text-muted-foreground">
+                  {[item.artist || item.channel, item.album].filter(Boolean).join(", ")}
+                </span>
+              </span>
+              <span className="text-right text-[13px] tabular-nums text-muted-foreground">{duration(item.duration)}</span>
+              <span />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function Results({ phase, kind, titled }: { phase: Extract<Phase, { status: "done" }>; kind: Kind; titled: boolean }) {
   const { result, entries, query } = phase;
   if (!entries.length) {
     return (
@@ -258,6 +294,7 @@ function Results({ phase, kind }: { phase: Extract<Phase, { status: "done" }>; k
     <div className="max-w-4xl">
       {result.type === "playlist" && <PlaylistImport title={result.title} entries={entries} kind={kind} />}
       {result.type === "video" && <p className="mb-2 px-3 text-[13px] text-faint-foreground">Do link que você colou</p>}
+      {result.type === "query" && titled && <h2 className="mb-2 px-3 text-[13px] font-medium text-faint-foreground">No YouTube</h2>}
       <ul className="space-y-0.5">
         {entries.map((entry) => (
           <ResultRow key={entry.id} entry={entry} kind={kind} source={source} />
@@ -309,10 +346,21 @@ function ResultRow({ entry, kind, source }: { entry: Entry; kind: Kind; source: 
   return (
     <li
       data-result={entry.id}
-      onDoubleClick={() => item?.status === "done" && playItem(item.id)}
-      className="grid grid-cols-[auto_minmax(0,1fr)_56px_minmax(150px,auto)] items-center gap-4 rounded-control px-3 py-2 transition-[background-color] [transition-duration:var(--dur-fast)] hover:bg-raised"
+      onDoubleClick={() => void playEntry(entry, kind, source)}
+      className="group grid grid-cols-[auto_minmax(0,1fr)_56px_minmax(150px,auto)] items-center gap-4 rounded-control px-3 py-2 transition-[background-color] [transition-duration:var(--dur-fast)] hover:bg-raised"
     >
-      <Cover src={entry.thumbnail || null} kind={video ? "video" : "music"} className={video ? "w-[85px]" : "w-12"} rounded="rounded-[4px]" />
+      <button
+        type="button"
+        data-action="play"
+        aria-label={`Tocar ${entry.title}`}
+        onClick={() => void playEntry(entry, kind, source)}
+        className="relative shrink-0 rounded-[4px]"
+      >
+        <Cover src={entry.thumbnail || null} kind={video ? "video" : "music"} className={video ? "w-[85px]" : "w-12"} rounded="rounded-[4px]" />
+        <span className="absolute inset-0 flex items-center justify-center rounded-[4px] bg-background/60 text-foreground transition-opacity [transition-duration:var(--dur-fast)] [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
+          <Play weight="fill" className="h-5 w-5" />
+        </span>
+      </button>
       <div className="min-w-0">
         <div className="flex items-center gap-1.5">
           {entry.isShort && <span className="shrink-0 rounded-[4px] border border-border-strong px-1 text-[11px] text-muted-foreground">Short</span>}
