@@ -269,12 +269,20 @@ pub fn account_import(state: State<'_, AppState>, path: String) -> Res<()> {
     state.engine.import_cookie_file(&PathBuf::from(path)).map_err(msg)
 }
 
+/// Async, so reading the web view's cookies happens off the main thread (it deadlocks on
+/// Windows otherwise).
 #[tauri::command]
-pub fn account_disconnect(app: AppHandle, state: State<'_, AppState>) -> Res<()> {
+pub async fn account_disconnect(app: AppHandle, state: State<'_, AppState>) -> Res<()> {
     state.engine.disconnect().map_err(msg)?;
-    // The login window shares the cookie store with the main window: forget the session there too.
+    // Before the login window had a private session, it shared the main window's cookie store:
+    // Google's cookies an older version left there go, and the rest of the web view's data (the
+    // queue, recent searches) stays.
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.clear_all_browsing_data();
+        if let Ok(cookies) = window.cookies() {
+            for cookie in cookies.into_iter().filter(|c| c.domain().is_some_and(requiem_core::cookies::relevant)) {
+                let _ = window.delete_cookie(cookie);
+            }
+        }
     }
     Ok(())
 }

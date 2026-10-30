@@ -31,7 +31,10 @@ pub async fn account_login(app: AppHandle) -> Result<(), String> {
         return Ok(());
     }
     let url = LOGIN_URL.parse().map_err(|e| format!("{e}"))?;
+    // A private session: Google's cookies live only while the window is open, are copied to the
+    // engine's own file, and never reach the main window's storage.
     WebviewWindowBuilder::new(&app, "login", WebviewUrl::External(url))
+        .incognito(true)
         .title("Entrar no YouTube")
         .inner_size(480.0, 720.0)
         .center()

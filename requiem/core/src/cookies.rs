@@ -18,7 +18,7 @@ pub struct CookieRecord {
 }
 
 /// Only Google and YouTube cookies leave the web view.
-fn relevant(domain: &str) -> bool {
+pub fn relevant(domain: &str) -> bool {
     let d = domain.trim_start_matches('.');
     d == "youtube.com" || d.ends_with(".youtube.com") || d == "google.com" || d.ends_with(".google.com")
 }

@@ -890,6 +890,8 @@ export async function installPlayer() {
     await load(false);
     set({ position: pendingSeek ?? 0 });
   }
+  // Nothing plays yet: the chain can sleep until the first play.
+  rest();
 
   let timer: number | undefined;
   usePlayer.subscribe((s) => {
