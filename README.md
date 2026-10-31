@@ -11,11 +11,11 @@ Ciência da Computação na Estácio, conclusão em 12/2026. [LinkedIn](https://
 </a>
 
 - [ecommerce-analytics-react-powerbi](https://github.com/JVCSampaio/ecommerce-analytics-react-powerbi): vendas, margem e logística de um e-commerce fictício. Dataset sintético em Python, modelo estrela, 17 medidas DAX em PBIP/TMDL e dashboard React/TypeScript. [Abrir o dashboard](https://jvcsampaio.github.io/ecommerce-analytics-react-powerbi/).
-- [supplywatch-analytics](https://github.com/JVCSampaio/supplywatch-analytics): compras e fornecedores em Óleo e Gás. ETL de CSV, Excel e JSON com checagem de qualidade, modelo estrela, OTIF e saldo vencido por fornecedor, dashboard Streamlit e modelo Power BI (TMDL, DAX e Power Query).
+- [supplywatch-analytics](https://github.com/JVCSampaio/supplywatch-analytics): compras e fornecedores em Óleo e Gás. ETL de CSV, Excel e JSON com checagem de qualidade, modelo estrela, OTIF e saldo vencido por fornecedor, dashboard Streamlit e projeto Power BI (PBIP) com relatório de quatro páginas e 22 medidas DAX.
 - [commercial-pulse-analytics](https://github.com/JVCSampaio/commercial-pulse-analytics): receita, margem, descontos e devoluções em vendas B2B, com regressão comparada a um baseline sazonal, dashboard Streamlit e modelo Power BI (TMDL, DAX e Power Query).
-- [dataforge](https://github.com/JVCSampaio/dataforge): ingestão incremental da API do GitHub e de um CSV público (Gapminder), checagem de qualidade, PostgreSQL, SQL com CTEs e funções de janela, e API FastAPI em Docker.
+- [dataforge](https://github.com/JVCSampaio/dataforge): ingestão incremental da API do GitHub e de um CSV público (Gapminder), checagem de qualidade, PostgreSQL, SQL com CTEs e funções de janela, API FastAPI em Docker, DAG do Airflow e fluxo do n8n.
 
-Os dados de vendas e compras são simulados, com semente fixa. Os modelos Power BI do SupplyWatch e do Commercial Pulse ainda não têm PBIX nem validação visual no Power BI Desktop.
+Os dados de vendas e compras são simulados, com semente fixa. Os modelos Power BI do SupplyWatch (projeto PBIP) e do Commercial Pulse (pacote TMDL) passam por validação estrutural no CI, mas ainda não foram abertos no Power BI Desktop e não têm PBIX.
 
 ## Python e IA
 
