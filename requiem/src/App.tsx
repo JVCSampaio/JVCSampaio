@@ -14,6 +14,7 @@ import { WAIT } from "@/lib/motion";
 import { useDelayed } from "@/lib/useDelayed";
 import { DownloadsPage } from "@/pages/DownloadsPage";
 import { HomePage } from "@/pages/HomePage";
+import { YouTubeLikesPage } from "@/pages/YouTubeLikesPage";
 import { LikedPage } from "@/pages/LikedPage";
 import { StatsPage } from "@/pages/StatsPage";
 import { AlbumPage, ArtistPage, LibraryPage } from "@/pages/LibraryPage";
@@ -100,6 +101,8 @@ function Page({ route }: { route: Route }) {
       return <PlaylistPage key={route.id} id={route.id} />;
     case "liked":
       return <LikedPage />;
+    case "ytlikes":
+      return <YouTubeLikesPage />;
     case "stats":
       return <StatsPage />;
     case "downloads":

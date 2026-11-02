@@ -131,6 +131,7 @@ pub fn run() {
             commands::download,
             commands::download_many,
             commands::radio,
+            commands::youtube_likes,
             commands::paste_list,
             commands::import_list,
             commands::loudness_soon,

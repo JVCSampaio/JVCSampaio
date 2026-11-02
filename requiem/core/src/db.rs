@@ -358,9 +358,12 @@ impl Db {
                  ON CONFLICT(id) DO UPDATE SET
                     status = CASE
                         WHEN items.status = 'downloading' THEN 'downloading'
-                        WHEN items.status = 'done' AND items.kind = excluded.kind THEN 'done'
+                        WHEN items.status = 'done' AND (items.kind = excluded.kind OR excluded.kind = 'pick') THEN 'done'
                         ELSE 'queued' END,
-                    kind = CASE WHEN items.status = 'downloading' THEN items.kind ELSE excluded.kind END,
+                    kind = CASE
+                        WHEN items.status = 'downloading' THEN items.kind
+                        WHEN items.status = 'done' AND excluded.kind = 'pick' THEN items.kind
+                        ELSE excluded.kind END,
                     error = CASE WHEN items.status IN ('done', 'downloading') THEN items.error ELSE NULL END,
                     priority = MAX(items.priority, excluded.priority),
                     seen_at = excluded.seen_at",
@@ -1042,6 +1045,19 @@ mod tests {
         assert!(!db.discover(&new("ccccccccccc", "history"), 2).unwrap());
         assert_eq!(db.get("ccccccccccc").unwrap().unwrap().status, "removed");
         assert!(db.claim_next(priority::SYNC).unwrap().is_none());
+    }
+
+    /// A like picked from the list is queued; one already in the library stays as it is.
+    #[test]
+    fn picking_a_like_never_downloads_it_twice() {
+        let db = Db::in_memory().unwrap();
+        done(&db, "aaaaaaaaaaa", "A");
+        let again =
+            db.request(&NewItem { kind: "pick".into(), ..new("aaaaaaaaaaa", "liked") }, priority::ASKED).unwrap();
+        assert_eq!((again.status.as_str(), again.kind.as_str()), ("done", "music"));
+        let fresh =
+            db.request(&NewItem { kind: "pick".into(), ..new("bbbbbbbbbbb", "liked") }, priority::ASKED).unwrap();
+        assert_eq!((fresh.status.as_str(), fresh.kind.as_str()), ("queued", "pick"));
     }
 
     #[test]

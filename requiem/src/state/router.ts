@@ -10,6 +10,7 @@ export type Route =
   | { name: "album"; album: string; artist: string }
   | { name: "playlist"; id: number }
   | { name: "liked" }
+  | { name: "ytlikes" }
   | { name: "stats" }
   | { name: "downloads" }
   | { name: "settings"; section?: "account" | "folders" };

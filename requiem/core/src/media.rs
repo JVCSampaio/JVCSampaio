@@ -13,6 +13,9 @@ pub enum Kind {
     Video,
     /// Found by the sync; decided after reading the full metadata.
     Auto,
+    /// Chosen by the person from a list (their YouTube likes): a song or a video by what it is,
+    /// never left out by the rules of the sync.
+    Pick,
 }
 
 impl Kind {
@@ -21,6 +24,7 @@ impl Kind {
             Kind::Music => "music",
             Kind::Video => "video",
             Kind::Auto => "auto",
+            Kind::Pick => "pick",
         }
     }
 
@@ -28,6 +32,7 @@ impl Kind {
         match s {
             "music" => Kind::Music,
             "video" => Kind::Video,
+            "pick" => Kind::Pick,
             _ => Kind::Auto,
         }
     }

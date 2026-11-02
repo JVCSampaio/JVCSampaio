@@ -24,6 +24,7 @@ fn kind(value: &str) -> Res<Kind> {
     match value {
         "music" => Ok(Kind::Music),
         "video" => Ok(Kind::Video),
+        "pick" => Ok(Kind::Pick),
         other => Err(format!("tipo desconhecido: {other}")),
     }
 }
@@ -152,6 +153,12 @@ pub fn download(
 #[tauri::command]
 pub fn loudness_soon(state: State<'_, AppState>, ids: Vec<String>) {
     state.engine.loudness_soon(&ids);
+}
+
+/// What the person liked on YouTube, or on YouTube Music when `music` is true.
+#[tauri::command]
+pub async fn youtube_likes(state: State<'_, AppState>, music: bool) -> Res<Vec<Entry>> {
+    state.engine.youtube_likes(music).await.map_err(msg)
 }
 
 /// The songs of a pasted list.

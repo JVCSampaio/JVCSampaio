@@ -286,7 +286,7 @@ export function createMockBackend(): Backend {
     isShort: false,
   }));
 
-  const toItem = (entry: Entry, kind: Kind, source: string): Item => ({
+  const toItem = (entry: Entry, kind: Item["kind"], source: string): Item => ({
     id: entry.id,
     kind,
     title: entry.title,
@@ -411,7 +411,7 @@ export function createMockBackend(): Backend {
     download: async (entry, kind, source = "search", priority) => {
       const existing = items.get(entry.id);
       const keep = existing && (existing.status === "done" || existing.status === "downloading");
-      const it = keep ? existing : toItem(entry, kind, source);
+      const it = keep ? existing : toItem(entry, kind === "pick" ? "auto" : kind, source);
       items.set(it.id, it);
       if (it.status !== "done") urgency.set(it.id, Math.max(urgency.get(it.id) ?? 0, level(priority)));
       emit({ type: "item", item: { ...it } });
@@ -472,6 +472,11 @@ export function createMockBackend(): Backend {
           emit({ type: "item", item: { ...it } });
         }, 900);
       }
+    },
+    youtubeLikes: async (music) => {
+      const owned = [...items.values()].filter((i) => i.status === "done" && i.source === (music ? "liked_music" : "liked")).slice(0, 4);
+      const known = owned.map((i) => ({ id: i.id, title: i.title, artist: i.artist, channel: i.channel, duration: i.duration, thumbnail: i.thumbnailUrl ?? "", isShort: false }));
+      return wait([...radioPool.slice(music ? 0 : 6, music ? 6 : 12), ...known, ...searchPool.slice(0, 4)], 700);
     },
     radio: async (_seed, played) => {
       await wait(null, 1200);

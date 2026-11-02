@@ -1,5 +1,6 @@
 import type {
   AccountTest,
+  DownloadKind,
   EngineEvent,
   Entry,
   ImportStatus,
@@ -43,7 +44,9 @@ export interface Backend {
   search(query: string, kind: Kind): Promise<Entry[]>;
   resolve(text: string): Promise<Resolved>;
   /** `priority`: "now" for a song the person is waiting to hear, "soon" for the next songs of a radio. */
-  download(entry: Entry, kind: Kind, source?: string, priority?: Priority): Promise<Item>;
+  download(entry: Entry, kind: DownloadKind, source?: string, priority?: Priority): Promise<Item>;
+  /** Everything liked on YouTube, or on YouTube Music when `music` is true. */
+  youtubeLikes(music: boolean): Promise<Entry[]>;
   downloadMany(entries: Entry[], kind: Kind, playlist: string | null): Promise<number | null>;
   /** Songs like `seed` for a radio, leaving out the ones it already played. */
   radio(seed: string, played: string[]): Promise<Entry[]>;
@@ -128,6 +131,7 @@ async function tauriBackend(): Promise<Backend> {
     download: (entry, kind, source, priority) => invoke("download", { entry, kind, source: source ?? null, priority: priority ?? null }),
     downloadMany: (entries, kind, playlist) => invoke("download_many", { entries, kind, playlist }),
     radio: (seed, played) => invoke("radio", { seed, played }),
+    youtubeLikes: (music) => invoke("youtube_likes", { music }),
     loudnessSoon: (ids) => invoke("loudness_soon", { ids }),
     pasteList: (text) => invoke("paste_list", { text }),
     importList: (title, tracks) => invoke("import_list", { title, tracks }),

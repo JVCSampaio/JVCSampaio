@@ -11,6 +11,7 @@ import {
   Skull,
   Sparkle,
   WarningCircle,
+  YoutubeLogo,
 } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import { IconButton, Kbd } from "@/components/ui/Button";
@@ -74,6 +75,12 @@ export function Sidebar() {
           label="Biblioteca"
           active={routeIs(route, ["library", "artist", "album"])}
           onClick={() => go({ name: "library" })}
+        />
+        <NavItem
+          icon={<YoutubeLogo weight={routeIs(route, "ytlikes") ? "fill" : "regular"} />}
+          label="Curtidas no YouTube"
+          active={routeIs(route, "ytlikes")}
+          onClick={() => go({ name: "ytlikes" })}
         />
         <NavItem
           icon={<Sparkle weight={routeIs(route, "stats") ? "fill" : "regular"} />}

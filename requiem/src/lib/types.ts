@@ -1,6 +1,9 @@
 // Mirrors of the Rust engine's serde types (requiem-core).
 
 export type Kind = "music" | "video";
+/** What to download as: a song, a video, or "pick", decided by what the video is (for a choice
+ *  from the YouTube likes, never left out by the sync's rules). */
+export type DownloadKind = Kind | "pick";
 /** How soon a download is needed: "now" for a song the person is waiting to hear, "soon" for
  *  the next songs of a radio. Plain downloads have none. */
 export type Priority = "now" | "soon";

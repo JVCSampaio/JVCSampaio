@@ -1116,6 +1116,17 @@ impl Engine {
         result.map(|(found, _)| found)
     }
 
+    /// Everything the person liked on YouTube (`music` false) or YouTube Music (`music` true),
+    /// newest first, for them to choose what to download.
+    pub async fn youtube_likes(&self, music: bool) -> Result<Vec<Entry>> {
+        if self.settings().account == Account::None {
+            return Err(anyhow!("Conecte sua conta do YouTube para ver suas curtidas."));
+        }
+        self.ready_ytdlp()?;
+        let url = if music { "https://music.youtube.com/playlist?list=LM" } else { ":ytfav" };
+        Ok(self.ytdlp().listing(url, 5000).await?.1)
+    }
+
     async fn sync_feeds(&self) -> Result<(u32, Vec<String>)> {
         let settings = self.settings();
         if settings.account == Account::None {
@@ -1253,6 +1264,14 @@ impl Engine {
                         kind
                     }
                 }
+            }
+            Kind::Pick => {
+                if info.is_live_now() {
+                    return Err(anyhow!("Transmissões ao vivo não podem ser baixadas enquanto acontecem."));
+                }
+                let kind = media::natural_kind(&info, settings.max_music_minutes);
+                self.db.set_kind(&item.id, kind.as_str())?;
+                kind
             }
             fixed => {
                 if info.is_live_now() {
