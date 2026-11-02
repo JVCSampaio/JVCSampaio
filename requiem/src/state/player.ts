@@ -113,7 +113,14 @@ export function onNewQueue(listener: () => void) {
 let active: Deck = decks.a;
 let fadingOut: Deck | null = null;
 let loadedId: string | null = null;
-let pendingSeek: number | null = null;
+/** Where the item loading should start, once its length is known. Tied to that item, so a
+ *  file that fails first never moves the next song. */
+let pendingSeek: { id: string; at: number } | null = null;
+/** Moves on every load and every pause, so a load still waiting for the sound chain to wake
+ *  knows a newer action replaced it. */
+let generation = 0;
+/** The sleep timer is fading the sound out: nothing may advance the queue meanwhile. */
+let sleeping = false;
 let counted: string | null = null;
 
 // The listening log: seconds really heard per play (seeks do not count), and where a long item
@@ -200,13 +207,15 @@ function silenceOthers(keep: Deck) {
 }
 
 function pauseAll() {
+  generation++;
   cancelTransition();
   for (const deck of Object.values(decks)) deck.el.pause();
   fadingOut = null;
 }
 
 async function source(deck: Deck, item: Item) {
-  if (deck.id === item.id && deck.el.getAttribute("src")) return;
+  // A deck that failed (a preloaded file moved away) loads again instead of being reused.
+  if (deck.id === item.id && deck.el.getAttribute("src") && !deck.el.error) return;
   deck.id = item.id;
   deck.el.src = mediaUrl(item.id) || (await mockSource(item));
 }
@@ -217,6 +226,8 @@ async function mockSource(item: Item): Promise<string> {
 }
 
 async function load(autoplay: boolean) {
+  const mine = ++generation;
+  sleeping = false;
   cancelTransition();
   const id = currentId();
   const item = itemById(id);
@@ -240,12 +251,13 @@ async function load(autoplay: boolean) {
     loadedId = id;
     active = deck;
     const saved = resumeAt.has(id) ? resumeAt.get(id) : item.resumeAt;
-    if (pendingSeek == null && saved && (item.duration ?? 0) > LONG_ITEM) pendingSeek = saved;
-    const fresh = deck.id !== id;
+    if (pendingSeek?.id !== id) pendingSeek = saved && (item.duration ?? 0) > LONG_ITEM ? { id, at: saved } : null;
+    const fresh = deck.id !== id || !!deck.el.error;
     await source(deck, item);
+    if (mine !== generation) return;
     if (!fresh) {
       // Still loaded from before (preloaded, or played a moment ago): start it over.
-      deck.el.currentTime = pendingSeek ?? 0;
+      deck.el.currentTime = pendingSeek?.at ?? 0;
       pendingSeek = null;
     }
     deck.el.playbackRate = get().speed;
@@ -258,6 +270,7 @@ async function load(autoplay: boolean) {
   if (autoplay) {
     try {
       await wake();
+      if (mine !== generation) return;
       await deck.el.play();
     } catch (e) {
       if ((e as DOMException)?.name !== "AbortError") set({ playing: false });
@@ -323,7 +336,13 @@ export function toggle() {
   if (!currentId()) return;
   if (active.el.paused) {
     if (loadedId !== currentId()) void load(true);
-    else void wake().then(() => active.el.play().catch(() => {}));
+    else {
+      const mine = generation;
+      const deck = active;
+      void wake().then(() => {
+        if (mine === generation && deck === active) void deck.el.play().catch(() => {});
+      });
+    }
   } else {
     pauseAll();
   }
@@ -346,6 +365,8 @@ export function next(auto = false) {
   const { queue, index, repeat } = get();
   if (!queue.length) return;
   if (auto && repeat === "one") {
+    // Each time round is a play of its own in the listening log.
+    startListening();
     active.el.currentTime = 0;
     void active.el.play();
     return;
@@ -427,7 +448,10 @@ let sleepTimer: number | undefined;
 export function setSleep(choice: number | "end" | null) {
   window.clearTimeout(sleepTimer);
   if (choice === null) set({ sleep: null });
-  else if (choice === "end") set({ sleep: { endOfItem: true } });
+  else if (choice === "end") {
+    cancelTransition();
+    set({ sleep: { endOfItem: true } });
+  }
   else {
     set({ sleep: { at: Date.now() + choice * 60_000 } });
     sleepTimer = window.setTimeout(fallAsleep, choice * 60_000);
@@ -441,7 +465,11 @@ function fallAsleep() {
   const deck = active;
   if (deck.el.paused) return;
   cancelTransition();
+  sleeping = true;
   fadeTo(deck, deck.fadeLevel, 0, 8, () => {
+    // Anything the person did meanwhile (a new song, a pause) called it off.
+    if (!sleeping || deck !== active) return;
+    sleeping = false;
     pauseAll();
     setFade(deck, 1);
   });
@@ -547,7 +575,7 @@ function handover(current: Item, upcoming: Item): number | null {
 }
 
 function watchTransition(deck: Deck) {
-  if (scheduled || deck.name === "video" || deck.el.paused || "endOfItem" in (get().sleep ?? {})) return;
+  if (scheduled || sleeping || deck.name === "video" || deck.el.paused || "endOfItem" in (get().sleep ?? {})) return;
   const total = deck.el.duration;
   if (!Number.isFinite(total) || total <= 0) return;
   const at = upcomingIndex();
@@ -558,7 +586,8 @@ function watchTransition(deck: Deck) {
   if (fade == null) return;
   const remaining = (total - deck.el.currentTime) / (deck.el.playbackRate || 1);
   const other = deck === decks.a ? decks.b : decks.a;
-  if (remaining < fade + 15 && other.id !== upcoming.id) void preload(other, upcoming);
+  // A short song whose predecessor is still fading out on the other deck waits for it.
+  if (remaining < fade + 15 && other.id !== upcoming.id && other !== fadingOut) void preload(other, upcoming);
   const lead = fade > 0 ? fade : GAPLESS_OVERLAP;
   if (remaining > lead + 0.6) return;
   scheduled = true;
@@ -690,14 +719,17 @@ async function recover(deck: Deck): Promise<boolean> {
   if (retried || useAudio.getState().mode !== "graph" || !deck.id) return false;
   const url = mediaUrl(deck.id);
   if (!url) return false;
+  // Any answer, a 404 for a moved file included, proves cross-origin reads work: only a fetch
+  // that cannot read at all means the chain is the problem.
   const corsWorks = await fetch(url, { headers: { Range: "bytes=0-1" } })
-    .then((r) => r.ok)
+    .then(() => true)
     .catch(() => false);
   if (corsWorks) return false;
   retried = true;
+  const wasPlaying = get().playing;
   toPlain("o servidor de mídia não aceitou leitura do Web Audio");
   loadedId = null;
-  await load(true);
+  await load(wasPlaying);
   return true;
 }
 
@@ -706,7 +738,7 @@ function onMediaEvent(deck: Deck, event: Event) {
   const el = deck.el;
   switch (event.type) {
     case "play":
-      set({ playing: true });
+      set({ playing: true, ended: false });
       if ("mediaSession" in navigator) navigator.mediaSession.playbackState = "playing";
       watchStall();
       break;
@@ -734,8 +766,8 @@ function onMediaEvent(deck: Deck, event: Event) {
       sessionPosition();
       break;
     case "loadedmetadata":
-      if (pendingSeek != null) {
-        el.currentTime = pendingSeek;
+      if (pendingSeek && pendingSeek.id === deck.id) {
+        el.currentTime = pendingSeek.at;
         pendingSeek = null;
       }
       break;
@@ -746,6 +778,11 @@ function onMediaEvent(deck: Deck, event: Event) {
       const id = currentId();
       if (id) saveResume(id, el.duration || 0, el.duration || 0);
       reportHeard();
+      if (sleeping) {
+        sleeping = false;
+        set({ playing: false });
+        return;
+      }
       if (get().sleep && "endOfItem" in get().sleep!) {
         setSleep(null);
         set({ playing: false });
@@ -886,20 +923,29 @@ export async function installPlayer() {
     const savedId = saved.queue?.[saved.index ?? 0];
     const index = Math.max(0, savedId ? known.indexOf(savedId) : 0);
     set({ queue: known, index });
-    pendingSeek = savedId && known[index] === savedId ? saved.position ?? 0 : 0;
+    const at = savedId && known[index] === savedId ? saved.position ?? 0 : 0;
+    pendingSeek = { id: known[index], at };
     await load(false);
-    set({ position: pendingSeek ?? 0 });
+    set({ position: at });
   }
   // Nothing plays yet: the chain can sleep until the first play.
   rest();
 
+  // Saved at most once a second while anything changes; the position changes all the time while
+  // music plays, so waiting for a quiet second would never save. A long queue keeps 500 entries
+  // around the one playing.
   let timer: number | undefined;
-  usePlayer.subscribe((s) => {
-    window.clearTimeout(timer);
+  usePlayer.subscribe(() => {
+    if (timer !== undefined) return;
     timer = window.setTimeout(() => {
-      const { queue, index, position, volume, muted, shuffle, repeat } = s;
+      timer = undefined;
+      const { queue, index, position, volume, muted, shuffle, repeat } = get();
+      const from = Math.max(0, Math.min(index - 100, queue.length - 500));
       try {
-        localStorage.setItem(STORAGE, JSON.stringify({ queue: queue.slice(0, 500), index, position, volume, muted, shuffle, repeat }));
+        localStorage.setItem(
+          STORAGE,
+          JSON.stringify({ queue: queue.slice(from, from + 500), index: index - from, position, volume, muted, shuffle, repeat }),
+        );
       } catch {
         // Storage can be unavailable; playback does not depend on it.
       }
